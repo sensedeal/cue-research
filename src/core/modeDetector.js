@@ -44,8 +44,8 @@ const BUILTIN_MODES = {
     name: '技术分析视角'
   },
   businessAnalyst: {
-    keywords: ['商业模式', '市场竞争', '盈利', '商业化', '战略', '竞品', '对标', '独角兽', '创业公司'],
-    priority: 6,
+    keywords: ['商业模式', '市场竞争', '盈利', '商业化', '战略', '竞品', '对标', '独角兽', '创业公司', 'SaaS'],
+    priority: 9,
     name: '商业分析视角'
   },
   academic: {
@@ -61,7 +61,10 @@ const BUILTIN_MODES = {
  */
 export async function loadCustomModes(context) {
   try {
-    const workspace = getUserWorkspace(context);
+    // 优先从 context 获取，其次从环境变量获取
+    const workspace = context?.env?.OPENCLAW_WORKSPACE || 
+                      process.env.OPENCLAW_WORKSPACE || 
+                      process.cwd();
     const customPath = path.join(workspace, 'modes.json');
     
     if (await fs.pathExists(customPath)) {
