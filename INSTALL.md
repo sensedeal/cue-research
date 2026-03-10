@@ -24,12 +24,11 @@ openclaw skills install https://github.com/sensedeal/cue-research.git
 
 ## 💻 方案 3：本地安装（开发/测试）
 
-### 步骤 1：配置技能路径
+### 步骤 1：复制技能到 OpenClaw 目录
 
 ```bash
-# 添加本地技能目录到 OpenClaw 配置
-# 替换 <YOUR_PATH> 为实际路径，例如：/root/hdm/cue-research
-openclaw config set skills.paths '["<YOUR_PATH>/cue-research"]'
+# 将技能复制到 OpenClaw 技能目录
+cp -r /path/to/cue-research /root/.openclaw/workspace/skills/cue-research
 ```
 
 ### 步骤 2：重启 Gateway
@@ -44,7 +43,7 @@ openclaw gateway restart
 # 查看已安装技能列表
 openclaw skills list
 
-# 应能看到 cue-research 在列表中
+# 应能看到 Cue Research 在列表中，状态为 ✓ ready
 ```
 
 ---
