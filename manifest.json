@@ -18,7 +18,7 @@
       "type": "string",
       "secret": true,
       "required": true,
-      "description": "CueCue 大模型 API Key"
+      "description": "CueCue API Key"
     }
   },
   "backgroundJobs": [
