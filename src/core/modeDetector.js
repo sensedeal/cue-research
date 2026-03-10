@@ -57,18 +57,17 @@ const BUILTIN_MODES = {
 
 /**
  * 加载用户自定义模式（可选）
- * 从 workspace 的 modes.json 加载
+ * 从标准路径加载：process.env.OPENCLAW_WORKSPACE/modes.json
+ * 不依赖 context，便于测试和独立使用
  */
-export async function loadCustomModes(context) {
+export async function loadCustomModes() {
   try {
-    // 优先从 context 获取，其次从环境变量获取
-    const workspace = context?.env?.OPENCLAW_WORKSPACE || 
-                      process.env.OPENCLAW_WORKSPACE || 
-                      process.cwd();
+    const workspace = process.env.OPENCLAW_WORKSPACE || process.cwd();
     const customPath = path.join(workspace, 'modes.json');
     
     if (await fs.pathExists(customPath)) {
       const customModes = await fs.readJson(customPath);
+      console.log(`Loaded ${Object.keys(customModes).length} custom modes from ${customPath}`);
       return customModes;
     }
   } catch (e) {

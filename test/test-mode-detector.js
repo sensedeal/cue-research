@@ -125,6 +125,9 @@ class TestRunner {
   async runCustomModeTests() {
     console.log('\n📋 测试组 4: 自定义模式加载测试\n');
     
+    // 保存原始环境变量
+    const originalWorkspace = process.env.OPENCLAW_WORKSPACE;
+    
     // 创建临时测试文件
     const testWorkspace = path.join(process.cwd(), 'test-workspace');
     await fs.ensureDir(testWorkspace);
@@ -146,7 +149,8 @@ class TestRunner {
     };
     
     try {
-      const loaded = await loadCustomModes(mockContext);
+      process.env.OPENCLAW_WORKSPACE = testWorkspace;
+      const loaded = await loadCustomModes();
       this.assert(
         loaded.cryptoTrader !== undefined,
         `自定义模式加载：${JSON.stringify(Object.keys(loaded))}`
@@ -166,6 +170,9 @@ class TestRunner {
     } catch (e) {
       this.assert(false, `自定义模式测试失败：${e.message}`);
     } finally {
+      // 恢复环境变量
+      process.env.OPENCLAW_WORKSPACE = originalWorkspace;
+      
       // 清理临时文件
       await fs.remove(testWorkspace);
     }
