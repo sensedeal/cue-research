@@ -10,6 +10,10 @@
   "dependencies": {
     "fs-extra": "^11.2.0"
   },
+  "scripts": {
+    "test": "node test/test-mode-detector.js",
+    "test:all": "npm run test && node test/nlu-test.js"
+  },
   "openclaw": {
     "skill": true
   }
