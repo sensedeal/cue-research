@@ -1,7 +1,9 @@
+import { detectMode } from './modeDetector.js';
+
 /**
  * 自然语言研究意图检测 (NLU)
  * @param {string} input - 用户输入的原始文本
- * @returns {Object|null} 包含解析后的 topic 和触发标志
+ * @returns {Object|null} 包含解析后的 topic、detectedMode 和触发标志
  */
 export function detectResearchIntent(input) {
   if (!input || typeof input !== 'string') return null;
@@ -44,7 +46,15 @@ export function detectResearchIntent(input) {
         topic = topic.replace(p, '').trim();
       }
     }
-    return { shouldTrigger: true, topic };
+    
+    // 自动检测研究模式
+    const detectedMode = detectMode(topic);
+    
+    return { 
+      shouldTrigger: true, 
+      topic,
+      detectedMode  // 新增：自动匹配的研究模式
+    };
   }
 
   return null; // 不是调研意图，放行给其他插件或底层大模型

@@ -30,11 +30,14 @@ export async function handleResearchCommand(context, topic) {
 
   await atomicWriteJson(taskPath, { taskId, topic, status: 'running', progress: '正在启动...', conversationId, reportUrl });
 
-  // 发送启动通知（参考旧版格式）
+  // 发送启动通知（显示检测到的模式）
+  const { getModeInfo } = await import('./modeDetector.js');
+  const modeInfo = getModeInfo(mode);
+  
   await context.reply(`🚀 **研究任务已启动**
 
 📋 主题：${topic}
-🎯 视角：短线交易视角
+🎯 视角：${modeInfo.name}
 🔗 链接：${reportUrl}
 
 ⏳ 预计耗时：5-30 分钟
