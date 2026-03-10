@@ -2,6 +2,7 @@ import path from 'path';
 import { getUserWorkspace, atomicWriteJson, safeReadJson } from '../utils/storage.js';
 import { executeResearchStream } from '../api/cuecueClient.js';
 import { buildResearchCompleteCard, formatProgressMessage } from '../ui/cards.js';
+import { buildApiKeyMissingGuide } from './keyManager.js';
 
 export async function handleResearchCommand(context, topic) {
   if (!topic || topic.length < 2) {
@@ -9,7 +10,9 @@ export async function handleResearchCommand(context, topic) {
   }
 
   const apiKey = context.secrets?.CUECUE_API_KEY;
-  if (!apiKey) return context.reply('🔑 未配置 CUECUE_API_KEY。');
+  if (!apiKey) {
+    return context.reply(buildApiKeyMissingGuide());
+  }
 
   const taskId = `task_${Date.now()}`;
   const workspace = getUserWorkspace(context);
