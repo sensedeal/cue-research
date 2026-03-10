@@ -10,7 +10,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/sensedeal/cue-assistant-skill"
+    "url": "https://github.com/sensedeal/cue-research"
   },
   "license": "MIT",
   "categories": [
@@ -111,7 +111,7 @@
       "description": "每 30 分钟检查一次监控主题，发现新动态时主动推送"
     }
   ],
-  "changelog": "https://github.com/sensedeal/cue-assistant-skill/blob/main/CHANGELOG.md",
+  "changelog": "https://github.com/sensedeal/cue-research/blob/main/CHANGELOG.md",
   "homepage": "https://cuecue.cn",
   "support": {
     "email": "support@sensedeal.ai",
