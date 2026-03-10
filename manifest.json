@@ -1,0 +1,31 @@
+{
+  "name": "cue-research",
+  "displayName": "Cue Research - AI 调研助理",
+  "version": "1.0.0",
+  "description": "5-30 分钟生成专业级深度投资研究报告，支持全天候智能监控与自动推送。",
+  "author": "SenseDeal",
+  "permissions": [
+    "message:send",
+    "message:interactive",
+    "cron:register",
+    "storage:workspace"
+  ],
+  "network": {
+    "domains": ["cuecue.cn", "api.tavily.com", "api.qveris.ai"]
+  },
+  "configSchema": {
+    "CUECUE_API_KEY": {
+      "type": "string",
+      "secret": true,
+      "required": true,
+      "description": "CueCue 大模型 API Key"
+    }
+  },
+  "backgroundJobs": [
+    {
+      "name": "monitor-daemon",
+      "schedule": "*/30 * * * *",
+      "action": "runMonitorCheck"
+    }
+  ]
+}

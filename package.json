@@ -1,0 +1,16 @@
+{
+  "name": "@cuebot/cue-research",
+  "version": "1.0.0",
+  "description": "Cue Research - Professional AI Research Assistant for OpenClaw",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "fs-extra": "^11.2.0"
+  },
+  "openclaw": {
+    "skill": true
+  }
+}
