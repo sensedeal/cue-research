@@ -1,7 +1,47 @@
 /**
  * API Key 配置管理
- * 基于 OpenClaw Secrets + 注册引导
+ * 基于 secrets.json + 注册引导
  */
+import fs from 'fs-extra';
+import path from 'path';
+
+const SECRETS_PATH = '/root/.openclaw/secrets.json';
+
+/**
+ * 读取 secrets.json 中的 API Key
+ */
+export function getApiKeyFromSecrets(provider) {
+  try {
+    if (!fs.existsSync(SECRETS_PATH)) return null;
+    const secrets = JSON.parse(fs.readFileSync(SECRETS_PATH, 'utf-8'));
+    return secrets.providers?.[provider]?.apiKey || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * 保存 API Key 到 secrets.json
+ */
+export function saveApiKeyToSecrets(provider, apiKey) {
+  try {
+    let secrets = { providers: {} };
+    if (fs.existsSync(SECRETS_PATH)) {
+      secrets = JSON.parse(fs.readFileSync(SECRETS_PATH, 'utf-8'));
+    }
+    if (!secrets.providers) secrets.providers = {};
+    secrets.providers[provider] = { apiKey };
+    
+    const tmpPath = SECRETS_PATH + '.tmp';
+    fs.writeFileSync(tmpPath, JSON.stringify(secrets, null, 2), 'utf-8');
+    fs.moveSync(tmpPath, SECRETS_PATH, { overwrite: true });
+    fs.chmodSync(SECRETS_PATH, 0o600);
+    return true;
+  } catch (e) {
+    console.error('Failed to save API key:', e);
+    return false;
+  }
+}
 
 /**
  * 生成 API Key 配置状态卡片

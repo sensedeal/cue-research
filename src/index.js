@@ -6,7 +6,9 @@ import {
   detectKeyType, 
   buildApiKeyMissingGuide,
   buildKeyConfiguredSuccess,
-  buildKeyConfigFailed
+  buildKeyConfigFailed,
+  getApiKeyFromSecrets,
+  saveApiKeyToSecrets
 } from './core/keyManager.js';
 
 export default {
@@ -75,11 +77,13 @@ export default {
  * 处理 /key 命令
  */
 async function handleKeyCommand(context, args) {
-  const { reply, secrets } = context;
+  const { reply } = context;
   
   // 无参数：显示配置状态 + 注册引导
   if (!args || args.length === 0) {
-    const configuredKeys = Object.keys(secrets || {}).filter(k => k.includes('API_KEY'));
+    const configuredKeys = [];
+    if (getApiKeyFromSecrets('cuecue')) configuredKeys.push('CUECUE_API_KEY');
+    if (getApiKeyFromSecrets('tavily')) configuredKeys.push('TAVILY_API_KEY');
     return reply(buildApiKeyStatusCard(configuredKeys));
   }
   
@@ -91,9 +95,15 @@ async function handleKeyCommand(context, args) {
     return reply(buildKeyConfigFailed());
   }
   
-  // TODO: 调用 OpenClaw Secrets API 保存密钥
-  // 目前返回成功消息（实际使用需要 Gateway 支持 secrets set）
-  return reply(buildKeyConfiguredSuccess(keyInfo.name));
+  // 保存到 secrets.json
+  const provider = keyInfo.type.replace('_API_KEY', '').toLowerCase();
+  const success = saveApiKeyToSecrets(provider, apiKey);
+  
+  if (success) {
+    return reply(buildKeyConfiguredSuccess(keyInfo.name) + '\n💡 配置已立即生效，无需重启。');
+  } else {
+    return reply('❌ 配置失败，请检查文件权限或联系管理员。');
+  }
 }
 
 /**

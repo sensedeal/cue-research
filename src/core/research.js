@@ -2,14 +2,19 @@ import path from 'path';
 import { getUserWorkspace, atomicWriteJson, safeReadJson } from '../utils/storage.js';
 import { executeResearchStream } from '../api/cuecueClient.js';
 import { buildResearchCompleteCard, formatProgressMessage } from '../ui/cards.js';
-import { buildApiKeyMissingGuide } from './keyManager.js';
+import { buildApiKeyMissingGuide, getApiKeyFromSecrets } from './keyManager.js';
 
 export async function handleResearchCommand(context, topic) {
   if (!topic || topic.length < 2) {
     return context.reply('⚠️ 请提供需要调研的问题，例如：`/cue 分析宁德时代`');
   }
 
-  const apiKey = context.secrets?.CUECUE_API_KEY;
+  // 优先从 context.secrets 读取，其次从 secrets.json 读取
+  let apiKey = context.secrets?.CUECUE_API_KEY;
+  if (!apiKey) {
+    apiKey = getApiKeyFromSecrets('cuecue');
+  }
+  
   if (!apiKey) {
     return context.reply(buildApiKeyMissingGuide());
   }
