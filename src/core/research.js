@@ -6,23 +6,35 @@ import { buildApiKeyMissingGuide, getApiKeyFromSecrets } from './keyManager.js';
 import { randomUUID } from 'crypto';
 
 export async function handleResearchCommand(context, topic) {
-  if (!topic || topic.length < 2) {
-    return context.reply('⚠️ 请提供需要调研的问题，例如：`/cue 分析宁德时代`');
-  }
+  try {
+    if (!topic || topic.length < 2) {
+      return context.reply('⚠️ 请提供需要调研的问题，例如：`/cue 分析宁德时代`');
+    }
 
-  // 优先从 context.secrets 读取，其次从 secrets.json 读取
-  let apiKey = context.secrets?.CUECUE_API_KEY;
-  if (!apiKey) {
-    apiKey = getApiKeyFromSecrets('cuecue');
-  }
-  
-  if (!apiKey) {
-    return context.reply(buildApiKeyMissingGuide());
-  }
+    // 优先从 context.secrets 读取，其次从 secrets.json 读取
+    let apiKey = context.secrets?.CUECUE_API_KEY;
+    if (!apiKey) {
+      apiKey = getApiKeyFromSecrets('cuecue');
+    }
+    
+    if (!apiKey) {
+      return context.reply(buildApiKeyMissingGuide());
+    }
 
-  const taskId = `task_${Date.now()}`;
-  const workspace = getUserWorkspace(context);
-  const taskPath = path.join(workspace, 'tasks', `${taskId}.json`);
+    const taskId = `task_${Date.now()}`;
+    
+    // 降级方案：如果 getUserWorkspace 失败，使用固定路径
+    let workspace;
+    try {
+      workspace = getUserWorkspace(context);
+    } catch (e) {
+      console.warn('getUserWorkspace failed, using fallback:', e.message);
+      const userId = context.user?.id || context.senderId || 'ou_e06e4737cc3a312bdca573167fdf9258';
+      const channel = context.channel || 'feishu';
+      workspace = path.join('/root/.openclaw/workspaces', `${channel}-${userId}`, '.cuecue');
+    }
+    
+    const taskPath = path.join(workspace, 'tasks', `${taskId}.json`);
 
   // 生成 conversationId（16 位无横杠 UUID，参考旧版 cuebot）
   const conversationId = randomUUID().replace(/-/g, '').substring(0, 16);
@@ -45,8 +57,12 @@ export async function handleResearchCommand(context, topic) {
 ⏳ 预计耗时：5-30 分钟
 🔔 完成后会自动通知你~`);
 
+  console.log(`[CueResearch] Task started: ${taskId}, workspace: ${workspace}`);
+  
   // 放入后台执行，绝不阻塞当前请求
-  runBackgroundResearch(context, apiKey, topic, taskPath, conversationId, mode).catch(console.error);
+  runBackgroundResearch(context, apiKey, topic, taskPath, conversationId, mode)
+    .then(() => console.log(`[CueResearch] Task completed: ${taskId}`))
+    .catch(err => console.error(`[CueResearch] Task failed: ${taskId}`, err));
 }
 
 async function runBackgroundResearch(context, apiKey, topic, taskPath, conversationId, mode) {
