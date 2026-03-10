@@ -48,16 +48,24 @@ async function runBackgroundResearch(context, apiKey, topic, taskPath, conversat
   try {
     const reportUrl = `https://cuecue.cn/c/${conversationId}`;
     
-    const { report } = await executeResearchStream(apiKey, topic, async (progress) => {
-      // 通过 API 更新进度条卡片
-      if (msgId && context.bot?.editMessage) {
-        await context.bot.editMessage(msgId, formatProgressMessage(topic, progress.percent, progress.stage));
+    const { report } = await executeResearchStream({
+      apiKey,
+      topic,
+      mode: 'trader',  // 默认使用短线交易视角
+      conversationId,
+      userProfile: null,  // 暂时不传用户画像
+      onProgress: async (progress) => {
+        // 通过 API 更新进度条卡片
+        if (msgId && context.bot?.editMessage) {
+          await context.bot.editMessage(msgId, formatProgressMessage(topic, progress.percent, progress.stage || progress.subtask));
+        }
+        
+        // 更新本地存储
+        const taskData = await safeReadJson(taskPath) || {};
+        taskData.progress = progress.stage || progress.subtask;
+        taskData.percent = progress.percent;
+        await atomicWriteJson(taskPath, taskData);
       }
-      
-      // 更新本地存储
-      const taskData = await safeReadJson(taskPath) || {};
-      taskData.progress = progress.stage;
-      await atomicWriteJson(taskPath, taskData);
     });
     
     // 任务完成

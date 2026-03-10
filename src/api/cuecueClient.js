@@ -1,14 +1,42 @@
 import { buildSmartPrompt } from '../core/promptEngine.js';
 
-export async function executeResearchStream(apiKey, topic, onProgress) {
+/**
+ * 执行流式研究任务（参考旧版 cuebot 实现）
+ * @param {Object} options
+ * @param {string} options.apiKey - CUECUE API Key
+ * @param {string} options.topic - 研究主题
+ * @param {string} options.mode - 研究模式 (trader|fund-manager|researcher|...)
+ * @param {string} options.conversationId - 16 位 UUID
+ * @param {Object} options.userProfile - 用户画像
+ * @param {Function} options.onProgress - 进度回调
+ */
+export async function executeResearchStream({
+  apiKey,
+  topic,
+  mode = 'default',
+  conversationId,
+  userProfile = null,
+  onProgress
+}) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15 * 60 * 1000); // 15 分钟总超时
+  const timeoutId = setTimeout(() => controller.abort(), 30 * 60 * 1000); // 30 分钟总超时
 
   try {
+    // 生成 conversationId（如果没有提供）
+    const { randomUUID } = await import('crypto');
+    const finalConversationId = conversationId || randomUUID().replace(/-/g, '').substring(0, 16);
+    
+    // 构建提示词（参考旧版）
+    const prompt = buildSmartPrompt(topic, { mode, userProfile });
+    
     const response = await fetch('https://cuecue.cn/api/chat/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ messages: [{ role: 'user', content: buildSmartPrompt(topic) }] }),
+      body: JSON.stringify({ 
+        messages: [{ role: 'user', content: prompt }],
+        mode,
+        conversationId: finalConversationId
+      }),
       signal: controller.signal
     });
 
@@ -34,17 +62,23 @@ export async function executeResearchStream(apiKey, topic, onProgress) {
           try {
             const event = JSON.parse(dataStr);
             if (event.type === 'start_of_agent') {
-              onProgress({ percent: 40, stage: `智能体 ${event.data.agent_name} 推理中...` });
+              onProgress({ 
+                percent: 40, 
+                stage: `智能体 ${event.data.agent_name} 推理中...`,
+                subtask: event.data.agent_name
+              });
             } else if (event.type === 'message' && event.data.delta?.content) {
               reportContent += event.data.delta.content.replace(/【\d+-\d+】/g, '');
             } else if (event.type === 'final_session_state') {
-              onProgress({ percent: 99, stage: '生成总结' });
+              onProgress({ percent: 99, stage: '生成总结', subtask: 'finalizing' });
             }
           } catch (e) {}
         }
       }
     }
-    return { report: reportContent, reportUrl: `https://cuecue.cn/c/${Date.now()}` };
+    
+    const reportUrl = `https://cuecue.cn/c/${finalConversationId}`;
+    return { report: reportContent, reportUrl, conversationId: finalConversationId };
   } finally {
     clearTimeout(timeoutId);
   }
