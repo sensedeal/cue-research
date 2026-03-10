@@ -27,13 +27,23 @@ export async function executeResearchStream({
     // 构建提示词（无需用户画像）
     const prompt = buildSmartPrompt(topic, { mode });
     
+    // 生成 messageId（必需参数）
+    const messageId = `msg_${randomUUID().replace(/-/g, '')}`;
+    // 生成 chat_id（必需参数，必须是 UUID）
+    const chatId = randomUUID().replace(/-/g, '');
+    
     const response = await fetch('https://cuecue.cn/api/chat/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
       body: JSON.stringify({ 
-        messages: [{ role: 'user', content: prompt }],
-        mode,
-        conversationId: finalConversationId
+        messages: [{ role: 'user', content: prompt, id: messageId, type: 'text' }],
+        chat_id: chatId,
+        conversation_id: finalConversationId,
+        need_confirm: false,
+        need_analysis: false,
+        need_underlying: false,
+        need_recommend: false,
+        verbose: true
       }),
       signal: controller.signal
     });
