@@ -1,13 +1,12 @@
 import { buildSmartPrompt } from '../core/promptEngine.js';
 
 /**
- * 执行流式研究任务（参考旧版 cuebot 实现）
+ * 执行流式研究任务（新版 - 无用户画像）
  * @param {Object} options
  * @param {string} options.apiKey - CUECUE API Key
  * @param {string} options.topic - 研究主题
  * @param {string} options.mode - 研究模式 (trader|fund-manager|researcher|...)
  * @param {string} options.conversationId - 16 位 UUID
- * @param {Object} options.userProfile - 用户画像
  * @param {Function} options.onProgress - 进度回调
  */
 export async function executeResearchStream({
@@ -15,7 +14,6 @@ export async function executeResearchStream({
   topic,
   mode = 'default',
   conversationId,
-  userProfile = null,
   onProgress
 }) {
   const controller = new AbortController();
@@ -26,8 +24,8 @@ export async function executeResearchStream({
     const { randomUUID } = await import('crypto');
     const finalConversationId = conversationId || randomUUID().replace(/-/g, '').substring(0, 16);
     
-    // 构建提示词（参考旧版）
-    const prompt = buildSmartPrompt(topic, { mode, userProfile });
+    // 构建提示词（无需用户画像）
+    const prompt = buildSmartPrompt(topic, { mode });
     
     const response = await fetch('https://cuecue.cn/api/chat/stream', {
       method: 'POST',

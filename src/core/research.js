@@ -53,7 +53,6 @@ async function runBackgroundResearch(context, apiKey, topic, taskPath, conversat
       topic,
       mode: 'trader',  // 默认使用短线交易视角
       conversationId,
-      userProfile: null,  // 暂时不传用户画像
       onProgress: async (progress) => {
         // 通过 API 更新进度条卡片
         if (msgId && context.bot?.editMessage) {
