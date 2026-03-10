@@ -28,7 +28,8 @@ openclaw skills install https://github.com/sensedeal/cue-research.git
 
 ```bash
 # 添加本地技能目录到 OpenClaw 配置
-openclaw config set skills.paths '["/root/hdm/cue-research"]'
+# 替换 <YOUR_PATH> 为实际路径，例如：/root/hdm/cue-research
+openclaw config set skills.paths '["<YOUR_PATH>/cue-research"]'
 ```
 
 ### 步骤 2：重启 Gateway
@@ -123,8 +124,8 @@ openclaw secrets set CUECUE_API_KEY sk_xxx
 ### 问题 3：依赖未安装
 
 ```bash
-# 进入技能目录
-cd /root/hdm/cue-research
+# 进入技能目录（替换为你的实际路径）
+cd <YOUR_PATH>/cue-research
 
 # 安装依赖
 npm install
