@@ -28,12 +28,14 @@ export async function handleResearchCommand(context, topic) {
   const conversationId = randomUUID().replace(/-/g, '').substring(0, 16);
   const reportUrl = `https://cuecue.cn/c/${conversationId}`;
 
-  await atomicWriteJson(taskPath, { taskId, topic, status: 'running', progress: '正在启动...', conversationId, reportUrl });
+  // 自动检测研究模式
+  const { detectMode, getModeInfo } = await import('./modeDetector.js');
+  const mode = detectMode(topic);
+  const modeInfo = getModeInfo(mode);
+
+  await atomicWriteJson(taskPath, { taskId, topic, status: 'running', progress: '正在启动...', conversationId, reportUrl, mode });
 
   // 发送启动通知（显示检测到的模式）
-  const { getModeInfo } = await import('./modeDetector.js');
-  const modeInfo = getModeInfo(mode);
-  
   await context.reply(`🚀 **研究任务已启动**
 
 📋 主题：${topic}
@@ -44,24 +46,19 @@ export async function handleResearchCommand(context, topic) {
 🔔 完成后会自动通知你~`);
 
   // 放入后台执行，绝不阻塞当前请求
-  runBackgroundResearch(context, apiKey, topic, taskPath, conversationId, msgId).catch(console.error);
+  runBackgroundResearch(context, apiKey, topic, taskPath, conversationId, mode).catch(console.error);
 }
 
-async function runBackgroundResearch(context, apiKey, topic, taskPath, conversationId, msgId) {
+async function runBackgroundResearch(context, apiKey, topic, taskPath, conversationId, mode) {
   try {
     const reportUrl = `https://cuecue.cn/c/${conversationId}`;
     
     const { report } = await executeResearchStream({
       apiKey,
       topic,
-      mode: 'trader',  // 默认使用短线交易视角
+      mode,  // 使用检测到的模式
       conversationId,
       onProgress: async (progress) => {
-        // 通过 API 更新进度条卡片
-        if (msgId && context.bot?.editMessage) {
-          await context.bot.editMessage(msgId, formatProgressMessage(topic, progress.percent, progress.stage || progress.subtask));
-        }
-        
         // 更新本地存储
         const taskData = await safeReadJson(taskPath) || {};
         taskData.progress = progress.stage || progress.subtask;
