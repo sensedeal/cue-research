@@ -12,9 +12,37 @@
   },
   "scripts": {
     "test": "node test/test-mode-detector.js",
-    "test:all": "npm run test && node test/nlu-test.js"
+    "test:all": "npm run test && node test/nlu-test.js",
+    "sync": "bash scripts/sync-to-install.sh",
+    "dev": "bash scripts/sync-to-install.sh restart",
+    "build": "echo 'No build step required (ESM native)'"
   },
   "openclaw": {
-    "skill": true
+    "skill": true,
+    "displayName": "Cue Research - AI 调研助理",
+    "permissions": [
+      "message:send",
+      "message:interactive",
+      "cron:register",
+      "storage:workspace"
+    ],
+    "network": {
+      "domains": ["cuecue.cn", "api.tavily.com", "api.qveris.ai"]
+    },
+    "configSchema": {
+      "CUECUE_API_KEY": {
+        "type": "string",
+        "secret": true,
+        "required": true,
+        "description": "CueCue API Key"
+      }
+    },
+    "backgroundJobs": [
+      {
+        "name": "monitor-daemon",
+        "schedule": "*/30 * * * *",
+        "action": "runMonitorCheck"
+      }
+    ]
   }
 }
