@@ -69,18 +69,34 @@ export async function executeResearchStream({
           if (dataStr === '[DONE]') continue;
           try {
             const event = JSON.parse(dataStr);
-            if (event.type === 'start_of_agent') {
+            console.log('[API Event]', event);
+            // 处理智能体启动事件
+            if (event.agent_name) {
               onProgress({ 
                 percent: 40, 
-                stage: `智能体 ${event.data.agent_name} 推理中...`,
-                subtask: event.data.agent_name
+                stage: `智能体 ${event.agent_name} 推理中...`,
+                subtask: event.agent_name
               });
-            } else if (event.type === 'message' && event.data.delta?.content) {
-              reportContent += event.data.delta.content.replace(/【\d+-\d+】/g, '');
-            } else if (event.type === 'final_session_state') {
+            } 
+            // 处理消息内容
+            else if (event.delta?.content) {
+              reportContent += event.delta.content.replace(/【\d+-\d+】/g, '');
+            }
+            // 处理工具调用
+            else if (event.tool_title) {
+              onProgress({ 
+                percent: 60, 
+                stage: `执行工具：${event.tool_title}`,
+                subtask: event.tool_name
+              });
+            }
+            // 处理最终状态
+            else if (event.conversation_status === 'finished') {
               onProgress({ percent: 99, stage: '生成总结', subtask: 'finalizing' });
             }
-          } catch (e) {}
+          } catch (e) {
+            console.log('[Event Parse Error]', e, 'line:', line);
+          }
         }
       }
     }
