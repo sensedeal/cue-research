@@ -36,19 +36,19 @@ export async function handleResearchCommand(context, topic) {
     
     const taskPath = path.join(workspace, 'tasks', `${taskId}.json`);
 
-  // 生成 conversationId（16 位无横杠 UUID，参考旧版 cuebot）
-  const conversationId = randomUUID().replace(/-/g, '').substring(0, 16);
-  const reportUrl = `https://cuecue.cn/c/${conversationId}`;
+    // 生成 conversationId（16 位无横杠 UUID，参考旧版 cuebot）
+    const conversationId = randomUUID().replace(/-/g, '').substring(0, 16);
+    const reportUrl = `https://cuecue.cn/c/${conversationId}`;
 
-  // 自动检测研究模式
-  const { detectMode, getModeInfo } = await import('./modeDetector.js');
-  const mode = detectMode(topic);
-  const modeInfo = getModeInfo(mode);
+    // 自动检测研究模式
+    const { detectMode, getModeInfo } = await import('./modeDetector.js');
+    const mode = detectMode(topic);
+    const modeInfo = getModeInfo(mode);
 
-  await atomicWriteJson(taskPath, { taskId, topic, status: 'running', progress: '正在启动...', conversationId, reportUrl, mode });
+    await atomicWriteJson(taskPath, { taskId, topic, status: 'running', progress: '正在启动...', conversationId, reportUrl, mode });
 
-  // 发送启动通知（显示检测到的模式）
-  await context.reply(`🚀 **研究任务已启动**
+    // 发送启动通知（显示检测到的模式）
+    await context.reply(`🚀 **研究任务已启动**
 
 📋 主题：${topic}
 🎯 视角：${modeInfo.name}
@@ -57,12 +57,16 @@ export async function handleResearchCommand(context, topic) {
 ⏳ 预计耗时：5-30 分钟
 🔔 完成后会自动通知你~`);
 
-  console.log(`[CueResearch] Task started: ${taskId}, workspace: ${workspace}`);
-  
-  // 放入后台执行，绝不阻塞当前请求
-  runBackgroundResearch(context, apiKey, topic, taskPath, conversationId, mode)
-    .then(() => console.log(`[CueResearch] Task completed: ${taskId}`))
-    .catch(err => console.error(`[CueResearch] Task failed: ${taskId}`, err));
+    console.log(`[CueResearch] Task started: ${taskId}, workspace: ${workspace}`);
+    
+    // 放入后台执行，绝不阻塞当前请求
+    runBackgroundResearch(context, apiKey, topic, taskPath, conversationId, mode)
+      .then(() => console.log(`[CueResearch] Task completed: ${taskId}`))
+      .catch(err => console.error(`[CueResearch] Task failed: ${taskId}`, err));
+  } catch (error) {
+    console.error(`[CueResearch] handleResearchCommand error:`, error);
+    return context.reply(`❌ 启动研究任务失败：${error.message}`);
+  }
 }
 
 async function runBackgroundResearch(context, apiKey, topic, taskPath, conversationId, mode) {
@@ -98,11 +102,7 @@ async function runBackgroundResearch(context, apiKey, topic, taskPath, conversat
     taskData.status = 'failed';
     await atomicWriteJson(taskPath, taskData);
     
-    if (msgId && context.bot?.editMessage) {
-      await context.bot.editMessage(msgId, `❌ **研究任务失败：${topic}**\n原因：${error.message}`);
-    } else {
-      await context.reply(`❌ **研究任务失败：${topic}**\n原因：${error.message}`);
-    }
+    await context.reply(`❌ **研究任务失败：${topic}**\n原因：${error.message}`);
   }
 }
 
