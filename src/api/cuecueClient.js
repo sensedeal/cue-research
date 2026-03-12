@@ -70,8 +70,10 @@ export async function executeResearchStream({
           try {
             const event = JSON.parse(dataStr);
             console.log('[API Event]', event);
+            console.log('[Processing Event]', event);
             // 处理智能体启动事件
             if (event.agent_name) {
+              console.log('[onProgress] Calling with agent_name:', event.agent_name);
               onProgress({ 
                 percent: 40, 
                 stage: `智能体 ${event.agent_name} 推理中...`,
@@ -84,6 +86,7 @@ export async function executeResearchStream({
             }
             // 处理工具调用
             else if (event.tool_title) {
+              console.log('[onProgress] Calling with tool_title:', event.tool_title);
               onProgress({ 
                 percent: 60, 
                 stage: `执行工具：${event.tool_title}`,
@@ -92,6 +95,7 @@ export async function executeResearchStream({
             }
             // 处理最终状态
             else if (event.conversation_status === 'finished') {
+              console.log('[onProgress] Calling with finished status');
               onProgress({ percent: 99, stage: '生成总结', subtask: 'finalizing' });
             }
           } catch (e) {
