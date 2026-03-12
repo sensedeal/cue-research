@@ -72,6 +72,7 @@ export async function handleResearchCommand(context, topic) {
 async function runBackgroundResearch(context, apiKey, topic, taskPath, conversationId, mode) {
   try {
     const reportUrl = `https://cuecue.cn/c/${conversationId}`;
+    let lastProgressMsgId = null;
     
     const { report } = await executeResearchStream({
       apiKey,
@@ -84,6 +85,21 @@ async function runBackgroundResearch(context, apiKey, topic, taskPath, conversat
         taskData.progress = progress.stage || progress.subtask;
         taskData.percent = progress.percent;
         await atomicWriteJson(taskPath, taskData);
+
+        // 发送进度更新（如果有百分比）
+        if (progress.percent !== undefined) {
+          const progressMsg = formatProgressMessage(topic, progress.percent, progress.stage || progress.subtask);
+          if (lastProgressMsgId && context.bot?.editMessage) {
+            try {
+              await context.bot.editMessage(lastProgressMsgId, progressMsg);
+            } catch (e) {
+              // 编辑失败，发送新消息
+              lastProgressMsgId = await context.reply(progressMsg);
+            }
+          } else {
+            lastProgressMsgId = await context.reply(progressMsg);
+          }
+        }
       }
     });
     
