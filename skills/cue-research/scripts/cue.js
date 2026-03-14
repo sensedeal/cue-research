@@ -309,24 +309,44 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
               
               // 解析进度信息
               const percent = event.percent || 0;
-              const stage = event.stage || '';
               
-              // 子任务优先级：tool_input.question > tool_title > agent_name
+              // 子任务优先级：subtask > tool_input.question > tool_title > agent_name
               let subtask = '';
-              if (event.tool_input?.question) {
-                // 工具调用：使用研究问题作为子任务
-                subtask = event.tool_input.question;
+              let stage = '';
+              
+              if (event.subtask) {
+                // 服务端直接返回 subtask（最优先）
+                subtask = event.subtask;
+                stage = event.stage || subtask;
+              } else if (event.tool_input?.question) {
+                // 工具调用：根据研究问题生成友好的子任务描述
+                const question = event.tool_input.question;
+                // 尝试从问题中提取动词，构造友好的描述
+                if (question.includes('framework') || question.includes('analysis')) {
+                  subtask = '构建分析框架并检索核心数据';
+                } else if (question.includes('metric') || question.includes('margin') || question.includes('growth')) {
+                  subtask = '收集关键财务指标与市场数据';
+                } else if (question.includes('comparison') || question.includes('vs') || question.includes('comparison')) {
+                  subtask = '竞品对比分析与数据验证';
+                } else if (question.includes('moat') || question.includes('advantage') || question.includes('competitive')) {
+                  subtask = '分析竞争优势与护城河';
+                } else {
+                  subtask = '深度研究分析中...';
+                }
+                stage = subtask;
               } else if (event.tool_title) {
                 // 工具执行：使用工具标题
                 subtask = event.tool_title;
+                stage = `执行工具：${event.tool_title}`;
               } else if (event.agent_name) {
                 // 智能体启动：使用智能体名称
-                subtask = event.agent_name;
+                subtask = `${event.agent_name} 工作中...`;
+                stage = `智能体 ${event.agent_name} 推理中...`;
               }
               
               // 调试：打印关键信息
               if (subtask) {
-                console.log(`📊 [进度] subtask="${subtask.substring(0, 50)}${subtask.length > 50 ? '...' : ''}"`);
+                console.log(`📊 [进度] 当前阶段：${subtask}`);
               }
               
               // 累积报告内容（用于完成通知摘要）
