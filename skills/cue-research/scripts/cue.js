@@ -48,6 +48,43 @@ function getWorkspace(channel = 'feishu', userId = 'default') {
 }
 
 /**
+ * 发送飞书启动通知
+ */
+async function sendFeishuNotification(userId, topic, mode, reportUrl) {
+  const modeNames = {
+    'trader': '短线交易',
+    'investor': '基本面分析',
+    'researcher': '产业研究',
+    'advisor': '资产配置',
+    'macro': '宏观分析',
+    'auto': '智能分析'
+  };
+  
+  const modeName = modeNames[mode] || mode;
+  
+  const message = `🚀 **研究已启动**
+
+📋 ${topic}
+🎯 ${modeName} 模式
+⏳ 预计：5-30 分钟
+
+🔗 [查看进度](${reportUrl})
+
+完成后会主动通知您！`;
+
+  try {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    await execAsync(`openclaw message send --target "user:${userId}" --message '${message.replace(/'/g, "'\"'\"'")}'`);
+    console.log(`✅ 飞书通知已发送至 ${userId}`);
+  } catch (e) {
+    console.error(`❌ 发送飞书通知失败：${e.message}`);
+  }
+}
+
+/**
  * 检测研究模式
  */
 function detectMode(topic) {
@@ -135,23 +172,21 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
       });
       
       if (response.ok) {
-        // API 返回的是 SSE 流，不需要解析 JSON
-        // 只需要确认连接成功即可
         console.log(`✅ API 调用成功：${response.status}`);
         taskData.status = 'running';
         taskData.apiCalled = true;
+        fs.writeJsonSync(taskFile, taskData, { spaces: 2 });
         
-        // 可选：读取流式响应（非必需，因为 CueCue 会通过 web 界面更新）
-        // const reader = response.body.getReader();
-        // ... 处理 SSE 流 ...
+        // 发送飞书启动通知
+        await sendFeishuNotification(userId, topic, mode, reportUrl);
+        
       } else {
         const errorText = await response.text();
         console.error(`❌ API 失败：${response.status} - ${errorText.substring(0, 200)}`);
         taskData.status = 'api_error';
         taskData.apiError = `${response.status}: ${errorText.substring(0, 200)}`;
+        fs.writeJsonSync(taskFile, taskData, { spaces: 2 });
       }
-      
-      fs.writeJsonSync(taskFile, taskData, { spaces: 2 });
       
     } catch (error) {
       console.error(`❌ API 异常：${error.message}`);
