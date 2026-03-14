@@ -307,7 +307,7 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
             try {
               const event = JSON.parse(dataStr);
               
-              // 解析进度信息（参考原版 research.js + cuecueClient.js）
+              // 解析进度信息（参考原版 research.js + cuecueClient.js，增强子任务描述）
               const percent = event.percent || 0;
               let subtask = '';
               let stage = '';
@@ -317,10 +317,45 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
                 stage = `智能体 ${event.agent_name} 推理中...`;
                 subtask = event.agent_name;
               }
-              // 工具调用事件
+              // 工具调用事件（根据研究问题生成友好的中文描述）
               else if (event.tool_title) {
-                stage = `执行工具：${event.tool_title}`;
-                subtask = event.tool_name || event.tool_title;
+                const question = event.tool_input?.question || '';
+                
+                // 根据研究问题生成友好的子任务描述
+                if (question) {
+                  const q = question.toLowerCase();
+                  if (q.includes('moat') || q.includes('advantage') || q.includes('competitive')) {
+                    stage = '分析竞争优势与护城河';
+                    subtask = '竞争优势分析';
+                  } else if (q.includes('metric') || q.includes('margin') || q.includes('gross')) {
+                    stage = '收集关键财务指标与市场数据';
+                    subtask = '财务指标收集';
+                  } else if (q.includes('growth') || q.includes('expansion') || q.includes('trend')) {
+                    stage = '研究业务增长与市场趋势';
+                    subtask = '增长趋势研究';
+                  } else if (q.includes('framework') || q.includes('analysis')) {
+                    stage = '构建分析框架并检索核心数据';
+                    subtask = '框架构建与数据检索';
+                  } else if (q.includes('comparison') || q.includes('vs') || q.includes('compare')) {
+                    stage = '竞品对比分析与数据验证';
+                    subtask = '竞品对比分析';
+                  } else if (q.includes('fsd') || q.includes('autonomous') || q.includes('self-driving')) {
+                    stage = '研究自动驾驶技术与进展';
+                    subtask = '自动驾驶研究';
+                  } else if (q.includes('supercharger') || q.includes('charging') || q.includes('network')) {
+                    stage = '分析充电网络与基础设施';
+                    subtask = '充电网络分析';
+                  } else if (q.includes('battery') || q.includes('technology') || q.includes('tech')) {
+                    stage = '研究电池技术与技术布局';
+                    subtask = '电池技术研究';
+                  } else {
+                    stage = '深度研究分析中...';
+                    subtask = '研究分析';
+                  }
+                } else {
+                  stage = `执行工具：${event.tool_title}`;
+                  subtask = event.tool_name || event.tool_title;
+                }
               }
               // 完成状态
               else if (event.conversation_status === 'finished') {
