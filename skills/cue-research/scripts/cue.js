@@ -51,15 +51,16 @@ function getWorkspace(channel = 'feishu', userId = 'default') {
 
 /**
  * 发送飞书进度通知
+ * 格式参考原版 buildProgressCardFeishu
  */
-async function sendProgressNotification(userId, topic, percent, stage, reportUrl) {
-  const progressBar = '█'.repeat(Math.floor(percent / 5)) + '░'.repeat(20 - Math.floor(percent / 5));
-  
+async function sendProgressNotification(userId, topic, elapsedMinutes, displayStage, reportUrl) {
   const message = `🔔 **研究进度更新**
 
 📋 ${topic}
-📊 ${progressBar} ${percent}%
-📍 当前阶段：${stage}
+⏱️ 已用时：${elapsedMinutes} 分钟
+📊 当前阶段：${displayStage}
+
+预计剩余时间：${Math.max(1, 30 - elapsedMinutes)} 分钟
 
 🔗 [查看进度](${reportUrl})`;
 
@@ -69,7 +70,7 @@ async function sendProgressNotification(userId, topic, percent, stage, reportUrl
     const execAsync = promisify(exec);
     
     await execAsync(`openclaw message send --target "user:${userId}" --message '${message.replace(/'/g, "'\"'\"'")}'`);
-    console.log(`✅ 进度通知已发送：${percent}%`);
+    console.log(`✅ 进度通知已发送`);
   } catch (e) {
     console.error(`❌ 发送进度通知失败：${e.message}`);
   }
@@ -77,18 +78,33 @@ async function sendProgressNotification(userId, topic, percent, stage, reportUrl
 
 /**
  * 发送飞书完成通知
+ * 格式参考原版 buildResearchCompleteCardText
  */
-async function sendCompleteNotification(userId, topic, durationMin, reportUrl) {
-  const message = `✅ **研究完成！**
+async function sendCompleteNotification(userId, topic, durationMin, mode, reportUrl) {
+  const modeNames = {
+    'trader': '短线交易',
+    'investor': '基本面分析',
+    'researcher': '产业研究',
+    'advisor': '资产配置',
+    'macro': '宏观分析',
+    'auto': '智能分析'
+  };
+  const modeName = modeNames[mode] || mode;
+  const timestamp = new Date().toLocaleString('zh-CN');
+  
+  const message = `✅ **研究完成通知**
 
 📋 ${topic}
-⏱️ 总耗时：${durationMin} 分钟
+🕐 ${timestamp}
+⏱️ ${durationMin} 分钟
+🎯 ${modeName}
 
 🔗 [查看完整报告](${reportUrl})
 
-💡 **快捷操作**：
-• 回复 "创建监控" 开启持续监控
-• 回复 "追问" 生成深入问题`;
+💡 **快捷回复**：
+• 回复 "**创建监控**" 或 "**Y**" 开启推荐监控
+• 回复 "**追问**" 深入调研
+• 回复 "**状态**" 查看任务列表`;
 
   try {
     const { exec } = await import('child_process');
@@ -243,8 +259,10 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
       console.log(`📡 开始解析流式响应...`);
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
-      let lastSubtask = '';
-      let lastPercent = 0;
+      const notifyState = {
+        lastNotifiedSubtask: null,
+        lastNotifiedAt: null
+      };
       const startTime = Date.now();
       
       for await (const chunk of response.body) {
@@ -261,23 +279,33 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
               const event = JSON.parse(dataStr);
               
               // 解析进度信息
-              const percent = event.percent || lastPercent;
+              const percent = event.percent || 0;
               const stage = event.stage || '';
-              const subtask = event.subtask || event.agent_name || lastSubtask;
+              const subtask = event.subtask || event.agent_name || '';
               
-              if (subtask && subtask !== lastSubtask) {
-                console.log(`📊 进度更新：${subtask} (${percent}%)`);
-                lastSubtask = subtask;
-                lastPercent = percent;
+              // 更新任务状态
+              taskData.progress = subtask || stage;
+              taskData.percent = percent;
+              if (subtask) taskData.lastSubtask = subtask;
+              fs.writeJsonSync(taskFile, taskData, { spaces: 2 });
+              
+              // 🔔 进度通知逻辑（基于旧版：每 5 分钟 OR subtask 变化）
+              const elapsedMinutes = Math.floor((Date.now() - startTime) / 60000);
+              const displayStage = subtask || stage || '';
+              
+              const shouldNotify = 
+                // 条件 1: 有新的 subtask 且与上次不同（立即通知，不受 elapsedMinutes 限制）
+                (subtask && displayStage !== notifyState.lastNotifiedSubtask) ||
+                // 条件 2: 每 5 分钟强制推送（跳过 0 分钟，避免与启动通知重复）
+                (elapsedMinutes > 0 && elapsedMinutes % 5 === 0 && 
+                 (!notifyState.lastNotifiedAt || Date.now() - notifyState.lastNotifiedAt > 5 * 60 * 1000));
+              
+              if (shouldNotify) {
+                notifyState.lastNotifiedSubtask = displayStage;
+                notifyState.lastNotifiedAt = new Date().toISOString();
                 
-                // 更新任务状态
-                taskData.progress = stage || subtask;
-                taskData.percent = percent;
-                taskData.lastSubtask = subtask;
-                fs.writeJsonSync(taskFile, taskData, { spaces: 2 });
-                
-                // 发送进度通知（子任务变化时）
-                await sendProgressNotification(userId, topic, percent, stage || subtask, reportUrl);
+                console.log(`📊 进度通知：${displayStage} (${percent}%)`);
+                await sendProgressNotification(userId, topic, elapsedMinutes, displayStage, reportUrl);
               }
               
               // 检查是否完成
@@ -289,7 +317,7 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
                 fs.writeJsonSync(taskFile, taskData, { spaces: 2 });
                 
                 const durationMin = Math.floor((Date.now() - startTime) / 60000);
-                await sendCompleteNotification(userId, topic, durationMin, reportUrl);
+                await sendCompleteNotification(userId, topic, durationMin, mode, reportUrl);
                 return;
               }
               
