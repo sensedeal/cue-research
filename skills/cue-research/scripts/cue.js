@@ -78,7 +78,7 @@ async function sendProgressNotification(userId, topic, elapsedMinutes, displaySt
 
 /**
  * 发送飞书完成通知
- * 格式参考原版 buildResearchCompleteCardText
+ * 格式参考原版 buildResearchCompleteCardFeishu
  */
 async function sendCompleteNotification(userId, topic, durationMin, mode, reportUrl) {
   const modeNames = {
@@ -87,24 +87,22 @@ async function sendCompleteNotification(userId, topic, durationMin, mode, report
     'researcher': '产业研究',
     'advisor': '资产配置',
     'macro': '宏观分析',
-    'auto': '智能分析'
+    'auto': '智能分析',
+    'default': '默认'
   };
-  const modeName = modeNames[mode] || mode;
-  const timestamp = new Date().toLocaleString('zh-CN');
+  const modeName = modeNames[mode] || modeNames.default;
   
+  // 原版格式：🕐 {duration} 分钟  🎯 {modeName}
   const message = `✅ **研究完成通知**
 
 📋 ${topic}
-🕐 ${timestamp}
-⏱️ ${durationMin} 分钟
-🎯 ${modeName}
+🕐 ${durationMin} 分钟  🎯 ${modeName}
 
-🔗 [查看完整报告](${reportUrl})
+🔗 [查看报告](${reportUrl})
 
 💡 **快捷回复**：
 • 回复 "**创建监控**" 或 "**Y**" 开启推荐监控
-• 回复 "**追问**" 深入调研
-• 回复 "**状态**" 查看任务列表`;
+• 回复 "**追问**" 深入调研`;
 
   try {
     const { exec } = await import('child_process');
