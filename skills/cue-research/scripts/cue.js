@@ -135,9 +135,15 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
       });
       
       if (response.ok) {
+        // API 返回的是 SSE 流，不需要解析 JSON
+        // 只需要确认连接成功即可
         console.log(`✅ API 调用成功：${response.status}`);
         taskData.status = 'running';
         taskData.apiCalled = true;
+        
+        // 可选：读取流式响应（非必需，因为 CueCue 会通过 web 界面更新）
+        // const reader = response.body.getReader();
+        // ... 处理 SSE 流 ...
       } else {
         const errorText = await response.text();
         console.error(`❌ API 失败：${response.status} - ${errorText.substring(0, 200)}`);
