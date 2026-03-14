@@ -307,46 +307,35 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
             try {
               const event = JSON.parse(dataStr);
               
-              // 解析进度信息
+              // 解析进度信息（参考原版 research.js + cuecueClient.js）
               const percent = event.percent || 0;
-              
-              // 子任务优先级：subtask > tool_input.question > tool_title > agent_name
               let subtask = '';
               let stage = '';
               
+              // 优先使用服务端返回的 subtask 字段（如果有）
               if (event.subtask) {
-                // 服务端直接返回 subtask（最优先）
                 subtask = event.subtask;
                 stage = event.stage || subtask;
-              } else if (event.tool_input?.question) {
-                // 工具调用：根据研究问题生成友好的子任务描述
-                const question = event.tool_input.question;
-                // 尝试从问题中提取动词，构造友好的描述
-                if (question.includes('framework') || question.includes('analysis')) {
-                  subtask = '构建分析框架并检索核心数据';
-                } else if (question.includes('metric') || question.includes('margin') || question.includes('growth')) {
-                  subtask = '收集关键财务指标与市场数据';
-                } else if (question.includes('comparison') || question.includes('vs') || question.includes('comparison')) {
-                  subtask = '竞品对比分析与数据验证';
-                } else if (question.includes('moat') || question.includes('advantage') || question.includes('competitive')) {
-                  subtask = '分析竞争优势与护城河';
-                } else {
-                  subtask = '深度研究分析中...';
-                }
-                stage = subtask;
-              } else if (event.tool_title) {
-                // 工具执行：使用工具标题
-                subtask = event.tool_title;
-                stage = `执行工具：${event.tool_title}`;
-              } else if (event.agent_name) {
-                // 智能体启动：使用智能体名称
-                subtask = `${event.agent_name} 工作中...`;
+              }
+              // 智能体启动事件
+              else if (event.agent_name) {
                 stage = `智能体 ${event.agent_name} 推理中...`;
+                subtask = event.agent_name;
+              }
+              // 工具调用事件
+              else if (event.tool_title) {
+                stage = `执行工具：${event.tool_title}`;
+                subtask = event.tool_name || event.tool_title;
+              }
+              // 完成状态
+              else if (event.conversation_status === 'finished') {
+                stage = '生成总结';
+                subtask = 'finalizing';
               }
               
-              // 调试：打印关键信息
-              if (subtask) {
-                console.log(`📊 [进度] 当前阶段：${subtask}`);
+              // 打印调试信息
+              if (stage) {
+                console.log(`📊 [进度] stage="${stage}", subtask="${subtask}", percent=${percent}`);
               }
               
               // 累积报告内容（用于完成通知摘要）
