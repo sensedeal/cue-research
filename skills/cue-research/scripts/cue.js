@@ -107,64 +107,64 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
   fs.writeJsonSync(taskFile, taskData, { spaces: 2 });
   console.log(`✅ 任务状态已保存：${taskFile}`);
   
-  // 调用 CueCue API
-  try {
-    const { randomUUID } = await import('crypto');
-    const messageId = `msg_${randomUUID().replace(/-/g, '')}`;
-    const chatId = randomUUID().replace(/-/g, '');
-    
-    const response = await fetch(`${CUECUE_API_BASE}/chat/stream`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        messages: [{ role: 'user', content: topic, id: messageId, type: 'text' }],
-        chat_id: chatId,
-        conversation_id: conversationId,
-        need_confirm: false,
-        need_analysis: false,
-        need_underlying: false,
-        need_recommend: false,
-        verbose: true
-      })
-    });
-    
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`API 请求失败：${response.status} ${error}`);
+  // 异步调用 CueCue API（不阻塞）
+  (async () => {
+    try {
+      const { randomUUID } = await import('crypto');
+      const messageId = `msg_${randomUUID().replace(/-/g, '')}`;
+      const chatId = randomUUID().replace(/-/g, '');
+      
+      console.log(`📡 调用 CueCue API...`);
+      
+      const response = await fetch(`${CUECUE_API_BASE}/chat/stream`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: topic, id: messageId, type: 'text' }],
+          chat_id: chatId,
+          conversation_id: conversationId,
+          need_confirm: false,
+          need_analysis: false,
+          need_underlying: false,
+          need_recommend: false,
+          verbose: true
+        })
+      });
+      
+      if (response.ok) {
+        console.log(`✅ API 调用成功：${response.status}`);
+        taskData.status = 'running';
+        taskData.apiCalled = true;
+      } else {
+        const errorText = await response.text();
+        console.error(`❌ API 失败：${response.status} - ${errorText.substring(0, 200)}`);
+        taskData.status = 'api_error';
+        taskData.apiError = `${response.status}: ${errorText.substring(0, 200)}`;
+      }
+      
+      fs.writeJsonSync(taskFile, taskData, { spaces: 2 });
+      
+    } catch (error) {
+      console.error(`❌ API 异常：${error.message}`);
+      taskData.status = 'api_error';
+      taskData.apiError = error.message;
+      fs.writeJsonSync(taskFile, taskData, { spaces: 2 });
     }
-    
-    const result = await response.json();
-    console.log(`✅ API 响应：${JSON.stringify(result, null, 2)}`);
-    
-    // 返回结果（供 LLM 使用）
-    return {
-      success: true,
-      taskId,
-      topic,
-      mode,
-      reportUrl,
-      estimatedTime: '5-30 分钟',
-      message: `研究已启动，完成后会通知您`
-    };
-    
-  } catch (error) {
-    console.error(`❌ API 调用失败：${error.message}`);
-    
-    // 更新任务状态为失败
-    taskData.status = 'failed';
-    taskData.error = error.message;
-    fs.writeJsonSync(taskFile, taskData, { spaces: 2 });
-    
-    return {
-      success: false,
-      error: error.message,
-      fallbackUrl: reportUrl,
-      message: `API 调用失败，但任务已本地记录。您可以直接访问 ${reportUrl} 查看`
-    };
-  }
+  })();
+  
+  // 立即返回（不等待 API 响应）
+  return {
+    success: true,
+    taskId,
+    topic,
+    mode,
+    reportUrl,
+    estimatedTime: '5-30 分钟',
+    message: `研究已启动，完成后会通知您`
+  };
 }
 
 // 主函数
