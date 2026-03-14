@@ -312,13 +312,8 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
               let subtask = '';
               let stage = '';
               
-              // 优先使用服务端返回的 subtask 字段（如果有）
-              if (event.subtask) {
-                subtask = event.subtask;
-                stage = event.stage || subtask;
-              }
               // 智能体启动事件
-              else if (event.agent_name) {
+              if (event.agent_name) {
                 stage = `智能体 ${event.agent_name} 推理中...`;
                 subtask = event.agent_name;
               }
