@@ -109,8 +109,9 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
   
   // 调用 CueCue API
   try {
-    const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
-    const chatId = Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+    const { randomUUID } = await import('crypto');
+    const messageId = `msg_${randomUUID().replace(/-/g, '')}`;
+    const chatId = randomUUID().replace(/-/g, '');
     
     const response = await fetch(`${CUECUE_API_BASE}/chat/stream`, {
       method: 'POST',
