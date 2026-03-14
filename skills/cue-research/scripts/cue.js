@@ -78,9 +78,9 @@ async function sendProgressNotification(userId, topic, elapsedMinutes, displaySt
 
 /**
  * 发送飞书完成通知
- * 格式参考原版 buildResearchCompleteCardFeishu
+ * 格式参考原版 buildResearchCompleteCardText
  */
-async function sendCompleteNotification(userId, topic, durationMin, mode, reportUrl) {
+async function sendCompleteNotification(userId, topic, durationMin, mode, reportUrl, reportContent) {
   const modeNames = {
     'trader': '短线交易',
     'investor': '基本面分析',
@@ -91,18 +91,40 @@ async function sendCompleteNotification(userId, topic, durationMin, mode, report
     'default': '默认'
   };
   const modeName = modeNames[mode] || modeNames.default;
+  const timestamp = new Date().toLocaleString('zh-CN');
   
-  // 原版格式：🕐 {duration} 分钟  🎯 {modeName}
-  const message = `✅ **研究完成通知**
-
-📋 ${topic}
-🕐 ${durationMin} 分钟  🎯 ${modeName}
-
-🔗 [查看报告](${reportUrl})
-
-💡 **快捷回复**：
-• 回复 "**创建监控**" 或 "**Y**" 开启推荐监控
-• 回复 "**追问**" 深入调研`;
+  // 清理报告摘要（参考原版逻辑）
+  let summary = reportContent;
+  if (summary) {
+    summary = summary
+      .replace(/^#\s*.+?\n/gm, '')
+      .replace(/^报告时间：.+?\n/gm, '')
+      .replace(/^##\s*执行摘要\s*\n/gm, '')
+      .replace(/^>\s*/gm, '')
+      .replace(/^\*\*关键数据\*\*：\n/gm, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    
+    if (summary.length > 300) {
+      summary = summary.substring(0, 300) + '...';
+    }
+  }
+  
+  // 构建通知内容（参考原版 buildResearchCompleteCardText）
+  let message = `✅ **研究完成通知**\n\n`;
+  message += `**🎯 核心结论**\n`;
+  message += `${topic}研究已完成。\n\n`;
+  
+  if (summary) {
+    message += `**📝 核心摘要**\n${summary}\n\n`;
+  }
+  
+  message += `🕐 ${timestamp}  ⏱️ ${durationMin} 分钟  🎯 ${modeName}\n\n`;
+  message += `🔗 [查看完整报告](${reportUrl})\n\n`;
+  message += `**快捷回复**：\n`;
+  message += `• 回复 "**创建监控**" 或 "**Y**" 开启推荐监控\n`;
+  message += `• 回复 "**追问**" 深入调研\n`;
+  message += `• 回复 "**状态**" 查看任务列表`;
 
   try {
     const { exec } = await import('child_process');
@@ -257,6 +279,7 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
       console.log(`📡 开始解析流式响应...`);
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
+      let reportContent = '';
       const notifyState = {
         lastNotifiedSubtask: null,
         lastNotifiedAt: null
@@ -280,6 +303,11 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
               const percent = event.percent || 0;
               const stage = event.stage || '';
               const subtask = event.subtask || event.agent_name || '';
+              
+              // 累积报告内容（用于完成通知摘要）
+              if (event.delta?.content) {
+                reportContent += event.delta.content.replace(/【\d+-\d+】/g, '');
+              }
               
               // 更新任务状态
               taskData.progress = subtask || stage;
@@ -307,7 +335,7 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
               }
               
               // 检查是否完成
-              if (event.status === 'completed' || percent >= 100) {
+              if (event.status === 'completed' || percent >= 100 || event.conversation_status === 'finished') {
                 console.log(`✅ 研究完成！`);
                 taskData.status = 'completed';
                 taskData.completedAt = new Date().toISOString();
@@ -315,7 +343,7 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
                 fs.writeJsonSync(taskFile, taskData, { spaces: 2 });
                 
                 const durationMin = Math.floor((Date.now() - startTime) / 60000);
-                await sendCompleteNotification(userId, topic, durationMin, mode, reportUrl);
+                await sendCompleteNotification(userId, topic, durationMin, mode, reportUrl, reportContent);
                 return;
               }
               
