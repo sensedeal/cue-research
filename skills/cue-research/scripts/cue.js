@@ -20,7 +20,7 @@ const __dirname = path.dirname(__filename);
 const SKILL_ROOT = path.resolve(__dirname, '..');
 
 // 配置
-const CUECUE_API_BASE = 'https://api.cuecue.cn/v1';
+const CUECUE_API_BASE = 'https://cuecue.cn/api';
 const SECRETS_FILE = path.join(SKILL_ROOT, 'secrets.json');
 const WORKSPACE_BASE = '/root/.openclaw/workspaces';
 
@@ -109,16 +109,24 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
   
   // 调用 CueCue API
   try {
-    const response = await fetch(`${CUECUE_API_BASE}/research`, {
+    const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+    const chatId = Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+    
+    const response = await fetch(`${CUECUE_API_BASE}/chat/stream`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        topic,
-        mode,
-        conversationId
+        messages: [{ role: 'user', content: topic, id: messageId, type: 'text' }],
+        chat_id: chatId,
+        conversation_id: conversationId,
+        need_confirm: false,
+        need_analysis: false,
+        need_underlying: false,
+        need_recommend: false,
+        verbose: true
       })
     });
     

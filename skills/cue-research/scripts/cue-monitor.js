@@ -26,7 +26,7 @@ const SKILL_ROOT = path.resolve(__dirname, '..');
 const execAsync = promisify(exec);
 
 // 配置
-const CUECUE_API_BASE = 'https://api.cuecue.cn/v1';
+const CUECUE_API_BASE = 'https://cuecue.cn/api';
 const SECRETS_FILE = path.join(SKILL_ROOT, 'secrets.json');
 const WORKSPACE_BASE = '/root/.openclaw/workspaces';
 const PROGRESS_INTERVAL_MS = 5 * 60 * 1000; // 5 分钟
@@ -82,24 +82,13 @@ function getAllTasks() {
 
 /**
  * 查询任务进度
+ * 注意：CueCue 没有单独的状态查询 API，需要通过轮询或等待完成通知
+ * 这里返回 null，表示需要依赖启动时返回的 URL
  */
 async function getTaskProgress(conversationId, apiKey) {
-  try {
-    const response = await fetch(`${CUECUE_API_BASE}/research/${conversationId}/status`, {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`
-      }
-    });
-    
-    if (!response.ok) {
-      return null;
-    }
-    
-    return await response.json();
-  } catch (e) {
-    console.error(`查询进度失败 ${conversationId}:`, e.message);
-    return null;
-  }
+  // TODO: 如果 CueCue 提供状态查询 API，可以在这里实现
+  // 目前依赖用户手动访问 reportUrl 查看进度
+  return null;
 }
 
 /**
