@@ -48,6 +48,59 @@ function getWorkspace(channel = 'feishu', userId = 'default') {
 }
 
 /**
+ * 发送飞书进度通知
+ */
+async function sendProgressNotification(userId, topic, percent, stage, reportUrl) {
+  const progressBar = '█'.repeat(Math.floor(percent / 5)) + '░'.repeat(20 - Math.floor(percent / 5));
+  
+  const message = `🔔 **研究进度更新**
+
+📋 ${topic}
+📊 ${progressBar} ${percent}%
+📍 当前阶段：${stage}
+
+🔗 [查看进度](${reportUrl})`;
+
+  try {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    await execAsync(`openclaw message send --target "user:${userId}" --message '${message.replace(/'/g, "'\"'\"'")}'`);
+    console.log(`✅ 进度通知已发送：${percent}%`);
+  } catch (e) {
+    console.error(`❌ 发送进度通知失败：${e.message}`);
+  }
+}
+
+/**
+ * 发送飞书完成通知
+ */
+async function sendCompleteNotification(userId, topic, durationMin, reportUrl) {
+  const message = `✅ **研究完成！**
+
+📋 ${topic}
+⏱️ 总耗时：${durationMin} 分钟
+
+🔗 [查看完整报告](${reportUrl})
+
+💡 **快捷操作**：
+• 回复 "创建监控" 开启持续监控
+• 回复 "追问" 生成深入问题`;
+
+  try {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    await execAsync(`openclaw message send --target "user:${userId}" --message '${message.replace(/'/g, "'\"'\"'")}'`);
+    console.log(`✅ 完成通知已发送`);
+  } catch (e) {
+    console.error(`❌ 发送完成通知失败：${e.message}`);
+  }
+}
+
+/**
  * 发送飞书启动通知
  */
 async function sendFeishuNotification(userId, topic, mode, reportUrl) {
@@ -144,7 +197,7 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
   fs.writeJsonSync(taskFile, taskData, { spaces: 2 });
   console.log(`✅ 任务状态已保存：${taskFile}`);
   
-  // 异步调用 CueCue API（不阻塞）
+  // 异步调用 CueCue API + 解析流式响应（不阻塞主流程）
   (async () => {
     try {
       const { randomUUID } = await import('crypto');
@@ -171,21 +224,85 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
         })
       });
       
-      if (response.ok) {
-        console.log(`✅ API 调用成功：${response.status}`);
-        taskData.status = 'running';
-        taskData.apiCalled = true;
-        fs.writeJsonSync(taskFile, taskData, { spaces: 2 });
-        
-        // 发送飞书启动通知
-        await sendFeishuNotification(userId, topic, mode, reportUrl);
-        
-      } else {
+      if (!response.ok) {
         const errorText = await response.text();
-        console.error(`❌ API 失败：${response.status} - ${errorText.substring(0, 200)}`);
-        taskData.status = 'api_error';
-        taskData.apiError = `${response.status}: ${errorText.substring(0, 200)}`;
-        fs.writeJsonSync(taskFile, taskData, { spaces: 2 });
+        throw new Error(`API 失败：${response.status} - ${errorText.substring(0, 200)}`);
+      }
+      
+      console.log(`✅ API 连接成功：${response.status}`);
+      taskData.status = 'running';
+      taskData.apiCalled = true;
+      fs.writeJsonSync(taskFile, taskData, { spaces: 2 });
+      
+      // 发送飞书启动通知
+      await sendFeishuNotification(userId, topic, mode, reportUrl);
+      
+      // 解析 SSE 流式响应
+      console.log(`📡 开始解析流式响应...`);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+      let lastSubtask = '';
+      let lastPercent = 0;
+      const startTime = Date.now();
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          console.log(`✅ 流式响应结束`);
+          break;
+        }
+        
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.slice(6).trim();
+            if (dataStr === '[DONE]') continue;
+            
+            try {
+              const event = JSON.parse(dataStr);
+              
+              // 解析进度信息
+              const percent = event.percent || lastPercent;
+              const stage = event.stage || '';
+              const subtask = event.subtask || event.agent_name || lastSubtask;
+              
+              if (subtask && subtask !== lastSubtask) {
+                console.log(`📊 进度更新：${subtask} (${percent}%)`);
+                lastSubtask = subtask;
+                lastPercent = percent;
+                
+                // 更新任务状态
+                taskData.progress = stage || subtask;
+                taskData.percent = percent;
+                taskData.lastSubtask = subtask;
+                fs.writeJsonSync(taskFile, taskData, { spaces: 2 });
+                
+                // 发送进度通知（子任务变化时）
+                await sendProgressNotification(userId, topic, percent, stage || subtask, reportUrl);
+              }
+              
+              // 检查是否完成
+              if (event.status === 'completed' || percent >= 100) {
+                console.log(`✅ 研究完成！`);
+                taskData.status = 'completed';
+                taskData.completedAt = new Date().toISOString();
+                taskData.percent = 100;
+                fs.writeJsonSync(taskFile, taskData, { spaces: 2 });
+                
+                const durationMin = Math.floor((Date.now() - startTime) / 60000);
+                await sendCompleteNotification(userId, topic, durationMin, reportUrl);
+                return;
+              }
+              
+            } catch (e) {
+              // 忽略解析错误
+            }
+          }
+        }
       }
       
     } catch (error) {
