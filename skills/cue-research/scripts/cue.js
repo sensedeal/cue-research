@@ -55,17 +55,12 @@ function getWorkspace(channel = 'feishu', userId = 'default') {
  * @param {string} userId - 用户 ID
  * @param {string} topic - 研究主题
  * @param {number} elapsedMinutes - 已用时（分钟）
- * @param {string} stage - 当前阶段（stage）
- * @param {string} subtask - 子任务名称（subtask）
+ * @param {string} subtask - 子任务名称（subtask，服务端返回的当前子任务）
  * @param {string} reportUrl - 报告链接
  */
-async function sendProgressNotification(userId, topic, elapsedMinutes, stage, subtask, reportUrl) {
-  // 优先显示子任务名称，降级使用 stage
-  const displayStage = (subtask && subtask.trim() !== '') 
-    ? subtask 
-    : (stage && stage.trim() !== '')
-      ? stage
-      : '研究进行中...';
+async function sendProgressNotification(userId, topic, elapsedMinutes, subtask, reportUrl) {
+  // 当前阶段 = subtask（子任务名称）
+  const displayStage = subtask || '研究进行中...';
   
   const message = `🔔 **研究进度更新**
 
@@ -344,7 +339,7 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
                 notifyState.lastNotifiedAt = Date.now();
                 
                 console.log(`📊 进度通知：${displayMessage} (${percent}%)`);
-                await sendProgressNotification(userId, topic, elapsedMinutes, stage, subtask, reportUrl);
+                await sendProgressNotification(userId, topic, elapsedMinutes, displayMessage, reportUrl);
               }
               
               // 检查是否完成（多种可能的完成标志）
