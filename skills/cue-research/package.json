@@ -7,7 +7,8 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "fs-extra": "^11.2.0"
+    "fs-extra": "^11.2.0",
+    "node-fetch": "^3.3.2"
   },
   "scripts": {
     "test": "node test/test-mode-detector.js",
@@ -27,7 +28,11 @@
       "storage:workspace"
     ],
     "network": {
-      "domains": ["cuecue.cn", "api.tavily.com", "api.qveris.ai"]
+      "domains": [
+        "cuecue.cn",
+        "api.tavily.com",
+        "api.qveris.ai"
+      ]
     },
     "configSchema": {
       "CUECUE_API_KEY": {
@@ -42,7 +47,10 @@
         "name": "cue",
         "description": "启动深度调研",
         "usage": "/cue <研究主题>",
-        "examples": ["/cue 分析宁德时代", "/cue 比亚迪 vs 特斯拉对比"]
+        "examples": [
+          "/cue 分析宁德时代",
+          "/cue 比亚迪 vs 特斯拉对比"
+        ]
       },
       {
         "name": "ct",
@@ -58,7 +66,9 @@
         "name": "cm",
         "description": "监控管理",
         "usage": "/cm add <监控主题>",
-        "examples": ["/cm add 宁德时代财报发布"]
+        "examples": [
+          "/cm add 宁德时代财报发布"
+        ]
       },
       {
         "name": "cn",
@@ -98,7 +108,9 @@
               "description": "用户想要调研的具体实体或问题，例如：'宁德时代的竞争优势' 或 '新能源汽车赛道'"
             }
           },
-          "required": ["topic"]
+          "required": [
+            "topic"
+          ]
         }
       }
     ]
