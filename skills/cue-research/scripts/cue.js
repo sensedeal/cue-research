@@ -307,14 +307,26 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
             try {
               const event = JSON.parse(dataStr);
               
-              // 解析进度信息（添加调试日志）
+              // 解析进度信息
               const percent = event.percent || 0;
               const stage = event.stage || '';
-              const subtask = event.subtask || event.agent_name || '';
               
-              // 调试：打印原始事件数据
-              if (percent > 0 || subtask) {
-                console.log(`[DEBUG] event: percent=${percent}, stage="${stage}", subtask="${subtask}", agent_name="${event.agent_name}"`);
+              // 子任务优先级：tool_input.question > tool_title > agent_name
+              let subtask = '';
+              if (event.tool_input?.question) {
+                // 工具调用：使用研究问题作为子任务
+                subtask = event.tool_input.question;
+              } else if (event.tool_title) {
+                // 工具执行：使用工具标题
+                subtask = event.tool_title;
+              } else if (event.agent_name) {
+                // 智能体启动：使用智能体名称
+                subtask = event.agent_name;
+              }
+              
+              // 调试：打印关键信息
+              if (subtask) {
+                console.log(`📊 [进度] subtask="${subtask.substring(0, 50)}${subtask.length > 50 ? '...' : ''}"`);
               }
               
               // 累积报告内容（用于完成通知摘要）
