@@ -334,8 +334,14 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
                 await sendProgressNotification(userId, topic, elapsedMinutes, displayStage, reportUrl);
               }
               
-              // 检查是否完成
-              if (event.status === 'completed' || percent >= 100 || event.conversation_status === 'finished') {
+              // 检查是否完成（多种可能的完成标志）
+              const isCompleted = 
+                event.status === 'completed' || 
+                percent >= 100 || 
+                event.conversation_status === 'finished' ||
+                (event.type === 'agent_response' && event.agent_name === 'reporter');
+              
+              if (isCompleted) {
                 console.log(`✅ 研究完成！`);
                 taskData.status = 'completed';
                 taskData.completedAt = new Date().toISOString();
