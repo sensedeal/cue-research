@@ -307,10 +307,15 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
             try {
               const event = JSON.parse(dataStr);
               
-              // 解析进度信息
+              // 解析进度信息（添加调试日志）
               const percent = event.percent || 0;
               const stage = event.stage || '';
               const subtask = event.subtask || event.agent_name || '';
+              
+              // 调试：打印原始事件数据
+              if (percent > 0 || subtask) {
+                console.log(`[DEBUG] event: percent=${percent}, stage="${stage}", subtask="${subtask}", agent_name="${event.agent_name}"`);
+              }
               
               // 累积报告内容（用于完成通知摘要）
               if (event.delta?.content) {
