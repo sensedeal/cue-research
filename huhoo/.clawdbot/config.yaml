@@ -1,0 +1,90 @@
+# AI 开发集群配置 (参考 Elvis 架构)
+
+## GitHub 配置
+github:
+  org: huhoo
+  baseUrl: https://github.com/huhoo
+  repos: 73  # 仓库数量
+
+## 模型分工 (混合架构：ACP via Bailian + Direct API)
+models:
+  # ========== ACP Harness (通过 Bailian Anthropic 兼容接口) ==========
+  # 使用 Bailian 的 Anthropic 兼容 API 调用 Qwen 模型
+  acp:
+    enabled: true
+    baseUrl: "https://coding.dashscope.aliyuncs.com/apps/anthropic"
+    apiKey: env:ANTHROPIC_AUTH_TOKEN  # 已在 ~/.claude/settings.json 配置
+    claude:
+      agentId: claude-code
+      model: qwen3.5-plus  # 通过 Anthropic 兼容接口调用
+      useFor:
+        - complex-backend      # 复杂后端
+        - security-critical    # 安全关键代码
+        - architecture-design  # 架构设计
+  
+  # ========== Direct API (Bailian 原生接口) ==========
+  # 用于日常开发、快速迭代、成本敏感任务
+  direct:
+    # 核心编排
+    orchestrator: bailian/qwen3.5-plus
+    
+    # 开发 Agent
+    backend: bailian/qwen3-coder-plus
+    frontend: bailian/qwen3-coder-next
+    fullstack: bailian/qwen3-coder-plus
+    
+    # 代码审查
+    review:
+      - model: bailian/glm-5
+        focus: 逻辑错误、竞态条件
+      - model: bailian/kimi-k2.5
+        focus: 安全性、最佳实践
+      - model: bailian/MiniMax-M2.5
+        focus: 性能优化
+    
+    # 专项 Agent
+    test: bailian/qwen3-coder-next
+    docs: bailian/qwen3.5-plus
+    refactor: bailian/qwen3-coder-plus
+    
+    # 备用模型
+    fallback:
+      - bailian/glm-5
+      - bailian/kimi-k2.5
+
+## 任务路由策略
+routing:
+  # 使用 ACP 的情况
+  useAcpWhen:
+    - taskComplexity > 8        # 复杂度>8
+    - securityCritical: true    # 安全关键
+    - requiresDeepReasoning     # 需要深度推理
+  
+  # 使用 Direct API 的情况
+  useDirectWhen:
+    - taskComplexity < 5        # 简单任务
+    - costSensitive: true       # 成本敏感
+    - rapidIteration            # 快速迭代
+
+## 飞书知识库 (替代 Obsidian)
+knowledge:
+  type: feishu-doc
+  url: https://sensedeal.feishu.cn/wiki/OQ9fw6GpZiC11DkXkPkcEhE4nTh
+  token: OQ9fw6GpZiC11DkXkPkcEhE4nTh
+  title: 首页
+  space_id: 待解析  # 可在飞书后台查看
+  # ✅ 权限已配置：wiki:node:read, wiki:node:retrieve
+
+## 工作流配置
+workflow:
+  tmuxPrefix: huhoo-
+  worktreeBase: /root/.openclaw/workspace/huhoo/worktrees
+  checkInterval: 600  # 10 分钟
+  maxRestarts: 3
+
+## 质量门禁
+quality:
+  typescriptCheck: true
+  unitTests: true
+  e2eTests: true
+  screenshotRequired: true  # UI 改动必须附带截图

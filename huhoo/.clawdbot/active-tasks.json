@@ -1,0 +1,30 @@
+{
+  "tasks": [
+    {
+      "id": "add-health-check",
+      "tmuxSession": "huhoo-add-health-check",
+      "agent": "backend",
+      "model": "bailian/qwen3-coder-plus",
+      "description": "添加健康检查 API 端点：GET /health，返回 { status: 'ok', timestamp: Date.now() }，需要包含单元测试",
+      "repo": "cuebot",
+      "worktree": "/root/.openclaw/workspace/huhoo/cuebot/worktrees/add-health-check",
+      "branch": "feature/add-health-check",
+      "startedAt": 1773246995,
+      "completedAt": 1773247080,
+      "reviewedAt": 1773247080,
+      "mergedAt": 1773250200,
+      "status": "merged",
+      "notifyOnComplete": true,
+      "restarts": 0,
+      "pr": "https://github.com/huhoo/cuebot/pull/1",
+      "checks": {
+        "codeReview": true,
+        "tests": true,
+        "merged": true
+      },
+      "note": "Merged to main ✅"
+    }
+  ],
+  "lastCheck": 1773247080,
+  "autoRestartLimit": 3
+}
