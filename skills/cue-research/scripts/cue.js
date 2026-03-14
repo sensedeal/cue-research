@@ -52,8 +52,21 @@ function getWorkspace(channel = 'feishu', userId = 'default') {
 /**
  * 发送飞书进度通知
  * 格式参考原版 buildProgressCardFeishu
+ * @param {string} userId - 用户 ID
+ * @param {string} topic - 研究主题
+ * @param {number} elapsedMinutes - 已用时（分钟）
+ * @param {string} stage - 当前阶段（stage）
+ * @param {string} subtask - 子任务名称（subtask）
+ * @param {string} reportUrl - 报告链接
  */
-async function sendProgressNotification(userId, topic, elapsedMinutes, displayStage, reportUrl) {
+async function sendProgressNotification(userId, topic, elapsedMinutes, stage, subtask, reportUrl) {
+  // 优先显示子任务名称，降级使用 stage
+  const displayStage = (subtask && subtask.trim() !== '') 
+    ? subtask 
+    : (stage && stage.trim() !== '')
+      ? stage
+      : '研究进行中...';
+  
   const message = `🔔 **研究进度更新**
 
 📋 ${topic}
@@ -70,7 +83,7 @@ async function sendProgressNotification(userId, topic, elapsedMinutes, displaySt
     const execAsync = promisify(exec);
     
     await execAsync(`openclaw message send --target "user:${userId}" --message '${message.replace(/'/g, "'\"'\"'")}'`);
-    console.log(`✅ 进度通知已发送`);
+    console.log(`✅ 进度通知已发送：${displayStage}`);
   } catch (e) {
     console.error(`❌ 发送进度通知失败：${e.message}`);
   }
@@ -315,23 +328,23 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
               if (subtask) taskData.lastSubtask = subtask;
               fs.writeJsonSync(taskFile, taskData, { spaces: 2 });
               
-              // 🔔 进度通知逻辑（基于旧版：每 5 分钟 OR subtask 变化）
+              // 🔔 进度通知逻辑（基于旧版 research.js）
               const elapsedMinutes = Math.floor((Date.now() - startTime) / 60000);
-              const displayStage = subtask || stage || '';
+              const displayMessage = subtask || stage || '';
               
               const shouldNotify = 
                 // 条件 1: 有新的 subtask 且与上次不同（立即通知，不受 elapsedMinutes 限制）
-                (subtask && displayStage !== notifyState.lastNotifiedSubtask) ||
+                (subtask && displayMessage !== notifyState.lastNotifiedSubtask) ||
                 // 条件 2: 每 5 分钟强制推送（跳过 0 分钟，避免与启动通知重复）
                 (elapsedMinutes > 0 && elapsedMinutes % 5 === 0 && 
                  (!notifyState.lastNotifiedAt || Date.now() - notifyState.lastNotifiedAt > 5 * 60 * 1000));
               
               if (shouldNotify) {
-                notifyState.lastNotifiedSubtask = displayStage;
-                notifyState.lastNotifiedAt = new Date().toISOString();
+                notifyState.lastNotifiedSubtask = displayMessage;
+                notifyState.lastNotifiedAt = Date.now();
                 
-                console.log(`📊 进度通知：${displayStage} (${percent}%)`);
-                await sendProgressNotification(userId, topic, elapsedMinutes, displayStage, reportUrl);
+                console.log(`📊 进度通知：${displayMessage} (${percent}%)`);
+                await sendProgressNotification(userId, topic, elapsedMinutes, stage, subtask, reportUrl);
               }
               
               // 检查是否完成（多种可能的完成标志）
