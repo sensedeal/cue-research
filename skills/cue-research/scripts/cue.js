@@ -11,6 +11,8 @@
  */
 
 import fetch from 'node-fetch';
+import { pipeline } from 'stream/promises';
+import { createWriteStream } from 'fs';
 import fs from 'fs-extra';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -237,23 +239,16 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
       // 发送飞书启动通知
       await sendFeishuNotification(userId, topic, mode, reportUrl);
       
-      // 解析 SSE 流式响应
+      // 解析 SSE 流式响应（Node.js 方式）
       console.log(`📡 开始解析流式响应...`);
-      const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
       let lastSubtask = '';
       let lastPercent = 0;
       const startTime = Date.now();
       
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          console.log(`✅ 流式响应结束`);
-          break;
-        }
-        
-        buffer += decoder.decode(value, { stream: true });
+      for await (const chunk of response.body) {
+        buffer += decoder.decode(chunk, { stream: true });
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
         
@@ -304,6 +299,8 @@ async function startResearch(topic, channel = 'feishu', userId = 'default') {
           }
         }
       }
+      
+      console.log(`✅ 流式响应结束`);
       
     } catch (error) {
       console.error(`❌ API 异常：${error.message}`);
