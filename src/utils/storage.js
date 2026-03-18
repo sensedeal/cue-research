@@ -22,9 +22,37 @@ export async function safeReadJson(filePath, fallback = null) {
   try {
     return await fs.readJson(filePath);
   } catch (error) {
-    if (error.code !== 'ENOENT') {
-      try { await fs.move(filePath, `${filePath}.corrupted`, { overwrite: true }); } catch(e){}
+    // 文件不存在
+    if (error.code === 'ENOENT') {
+      return fallback;
     }
+    
+    // JSON 解析错误，尝试恢复
+    if (error.name === 'SyntaxError' || error.message?.includes('Unexpected')) {
+      try {
+        const content = await fs.readFile(filePath, 'utf8');
+        // 尝试提取第一个完整的 JSON 对象
+        const jsonMatch = content.match(/^\\s*(\\{[\\s\\S]*?\\})\\s*(?:\\n|$)/m);
+        if (jsonMatch && jsonMatch[1]) {
+          try {
+            const recovered = JSON.parse(jsonMatch[1]);
+            // 备份损坏文件
+            await fs.move(filePath, `${filePath}.corrupted`, { overwrite: true });
+            // 写入恢复的数据
+            await fs.writeJson(filePath, recovered, { spaces: 2 });
+            console.log(`[Storage] JSON recovered: ${filePath}`);
+            return recovered;
+          } catch (e) {
+            // 恢复失败
+          }
+        }
+      } catch (recoverError) {
+        console.warn(`[Storage] Recovery failed: ${filePath}`, recoverError.message);
+      }
+    }
+    
+    // 备份损坏文件
+    try { await fs.move(filePath, `${filePath}.corrupted`, { overwrite: true }); } catch(e){}
     return fallback;
   }
 }

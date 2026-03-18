@@ -1,4 +1,4 @@
-import { handleResearchCommand, handleTaskStatus, handleCardAction } from './core/research.js';
+import { handleResearchCommand, handleTaskStatus, handleCancelCommand, handleCardAction, handleQuickReplyCommand } from './core/research.js';
 import { handleMonitorCommand, handleNotificationCommand, runMonitorCheck } from './core/monitor.js';
 import { detectResearchIntent } from './core/intent.js';
 import { 
@@ -25,6 +25,9 @@ export default {
           return await handleResearchCommand(context, args.join(' '));
         case 'ct':
           return await handleTaskStatus(context);
+        case 'cancel':
+        case 'stop':
+          return await handleCancelCommand(context);
         case 'cm':
           return await handleMonitorCommand(context, args);
         case 'cn':
@@ -43,23 +46,61 @@ export default {
   },
 
   /**
-   * 隐式自然语言消息钩子 (NLU 自动唤醒)
+   * 👇 【方案 C】处理大模型的函数调用（实现自然语言唤醒）
+   * OpenClaw 收到大模型的 Tool Call 后，会触发此回调
    */
-  async onMessage(context) {
+  async onToolCall(context) {
+    const { name, arguments: args } = context.toolCall || context;
+
+    if (name === 'start_deep_research') {
+      const topic = args?.topic || '';
+      console.log(`[CueSkill] 🤖 主控大模型决定调用深度调研，课题: ${topic}`);
+      return await handleResearchCommand(context, topic);
+    }
+  },
+
+  /**
+   * 👇 【方案 C】处理大模型的函数调用（备用名）
+   */
+  async onFunctionCall(context) {
+    return await this.onToolCall(context);
+  },
+
+  /**
+   * 【备用】保留本地 NLU 作为兜底方案
+   * 当大模型未识别到时，本地 NLU 仍可拦截
+   */
+  async onMessageReceived(context) {
     // 获取用户发送的纯文本
     const text = context.message?.text || context.text || '';
     
-    // 进行意图识别
+    // 空消息忽略
+    if (!text || text.trim().length === 0) return;
+    
+    // 1. 检查是否是快捷回复关键词
+    const quickReplyResult = await handleQuickReplyCommand(context, text);
+    if (quickReplyResult) {
+      return quickReplyResult;
+    }
+    
+    // 2. 【兜底】本地 NLU 作为大模型的补充
     const intent = detectResearchIntent(text);
     
     // 如果确认是调研意图，自动拦截并触发调研逻辑
     if (intent && intent.shouldTrigger) {
-      console.log(`[CueSkill] 💡 NLU 自动拦截调研意图：${intent.topic}`);
+      console.log(`[CueSkill] 💡 本地 NLU 兜底拦截调研意图：${intent.topic}`);
       // 复用 /cue 的处理逻辑
       return await handleResearchCommand(context, intent.topic);
     }
     
     // 如果不是调研意图，返回 undefined，OpenClaw 会自动把消息传给下一个插件或底层大模型
+  },
+
+  /**
+   * 向下兼容的 onMessage 钩子
+   */
+  async onMessage(context) {
+    return await this.onMessageReceived(context);
   },
 
   async onCardAction(context) {
@@ -129,6 +170,11 @@ function buildHelpMenu() {
 ╠══════════════════════════════════════════╣
 ║  💡 快捷用法：直接输入研究问题即可启动    ║
 ║     例："分析宁德时代竞争优势"            ║
+╠══════════════════════════════════════════╣
+║  🔔 完成通知支持交互按钮                  ║
+║  • 📊 查看完整报告                        ║
+║  • 🔔 创建推荐监控                        ║
+║  • 💬 追问问题                            ║
 ╠══════════════════════════════════════════╣
 ║  🎁 新用户福利                            ║
 ║  访问 https://cuecue.cn 注册              ║

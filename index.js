@@ -22,6 +22,31 @@ module.exports = {
     }
   },
 
+  // 方案 C：处理大模型的函数调用
+  async onToolCall(context) {
+    const mod = await loadSkillModule();
+    if (mod.default && typeof mod.default.onToolCall === 'function') {
+      return mod.default.onToolCall(context);
+    }
+  },
+
+  // 方案 C：处理大模型的函数调用（备用名）
+  async onFunctionCall(context) {
+    const mod = await loadSkillModule();
+    if (mod.default && typeof mod.default.onFunctionCall === 'function') {
+      return mod.default.onFunctionCall(context);
+    }
+  },
+
+  // OpenClaw 标准事件钩子：message:received
+  async onMessageReceived(context) {
+    const mod = await loadSkillModule();
+    if (mod.default && typeof mod.default.onMessageReceived === 'function') {
+      return mod.default.onMessageReceived(context);
+    }
+  },
+
+  // 向下兼容
   async onMessage(context) {
     const mod = await loadSkillModule();
     if (mod.default && typeof mod.default.onMessage === 'function') {

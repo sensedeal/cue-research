@@ -1,0 +1,471 @@
+#!/usr/bin/env node
+/**
+ * Cue Research - 任务启动脚本
+ * 
+ * 用法：node scripts/cue.js "研究主题"
+ * 
+ * 功能：
+ * 1. 调用 CueCue API 启动研究任务
+ * 2. 保存任务状态到本地
+ * 3. 返回报告链接（供 LLM 展示给用户）
+ */
+
+import fetch from 'node-fetch';
+import { pipeline } from 'stream/promises';
+import { createWriteStream } from 'fs';
+import fs from 'fs-extra';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const SKILL_ROOT = path.resolve(__dirname, '..');
+
+// 配置
+const CUECUE_API_BASE = 'https://cuecue.cn/api';
+const SECRETS_FILE = path.join(SKILL_ROOT, 'secrets.json');
+const WORKSPACE_BASE = '/root/.openclaw/workspaces';
+
+/**
+ * 读取 API Key
+ */
+function getApiKey() {
+  try {
+    const secrets = fs.readJsonSync(SECRETS_FILE);
+    return secrets.CUECUE_API_KEY;
+  } catch (e) {
+    console.error('❌ 无法读取 API Key，请确保 secrets.json 存在');
+    process.exit(1);
+  }
+}
+
+/**
+ * 获取用户工作区
+ */
+function getWorkspace(channel = 'feishu', userId = 'default') {
+  const workspacePath = path.join(WORKSPACE_BASE, `${channel}-${userId}`, '.cuecue');
+  fs.ensureDirSync(workspacePath);
+  fs.ensureDirSync(path.join(workspacePath, 'tasks'));
+  return workspacePath;
+}
+
+/**
+ * 发送飞书进度通知
+ * 格式参考原版 buildProgressCardFeishu
+ * @param {string} userId - 用户 ID
+ * @param {string} topic - 研究主题
+ * @param {number} elapsedMinutes - 已用时（分钟）
+ * @param {string} subtask - 子任务名称（subtask，服务端返回的当前子任务）
+ * @param {string} reportUrl - 报告链接
+ */
+async function sendProgressNotification(userId, topic, elapsedMinutes, subtask, reportUrl) {
+  // 当前阶段 = subtask（子任务名称）
+  const displayStage = subtask || '研究进行中...';
+  
+  const message = `🔔 **研究进度更新**
+
+📋 ${topic}
+⏱️ 已用时：${elapsedMinutes} 分钟
+📊 当前阶段：${displayStage}
+
+预计剩余时间：${Math.max(1, 30 - elapsedMinutes)} 分钟
+
+🔗 [查看进度](${reportUrl})`;
+
+  try {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    await execAsync(`openclaw message send --target "user:${userId}" --message '${message.replace(/'/g, "'\"'\"'")}'`);
+    console.log(`✅ 进度通知已发送：${displayStage}`);
+  } catch (e) {
+    console.error(`❌ 发送进度通知失败：${e.message}`);
+  }
+}
+
+/**
+ * 发送飞书完成通知
+ * 格式参考原版 buildResearchCompleteCardText
+ */
+async function sendCompleteNotification(userId, topic, durationMin, mode, reportUrl, reportContent) {
+  const modeNames = {
+    'trader': '短线交易',
+    'investor': '基本面分析',
+    'researcher': '产业研究',
+    'advisor': '资产配置',
+    'macro': '宏观分析',
+    'auto': '智能分析',
+    'default': '默认'
+  };
+  const modeName = modeNames[mode] || modeNames.default;
+  const timestamp = new Date().toLocaleString('zh-CN');
+  
+  // 清理报告摘要（参考原版逻辑）
+  let summary = reportContent;
+  if (summary) {
+    summary = summary
+      .replace(/^#\s*.+?\n/gm, '')
+      .replace(/^报告时间：.+?\n/gm, '')
+      .replace(/^##\s*执行摘要\s*\n/gm, '')
+      .replace(/^>\s*/gm, '')
+      .replace(/^\*\*关键数据\*\*：\n/gm, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    
+    if (summary.length > 300) {
+      summary = summary.substring(0, 300) + '...';
+    }
+  }
+  
+  // 构建通知内容（参考原版 buildResearchCompleteCardText）
+  let message = `✅ **研究完成通知**\n\n`;
+  message += `**🎯 核心结论**\n`;
+  message += `${topic}研究已完成。\n\n`;
+  
+  if (summary) {
+    message += `**📝 核心摘要**\n${summary}\n\n`;
+  }
+  
+  message += `🕐 ${timestamp}  ⏱️ ${durationMin} 分钟  🎯 ${modeName}\n\n`;
+  message += `🔗 [查看完整报告](${reportUrl})\n\n`;
+  message += `**快捷回复**：\n`;
+  message += `• 回复 "**创建监控**" 或 "**Y**" 开启推荐监控\n`;
+  message += `• 回复 "**追问**" 深入调研\n`;
+  message += `• 回复 "**状态**" 查看任务列表`;
+
+  try {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    await execAsync(`openclaw message send --target "user:${userId}" --message '${message.replace(/'/g, "'\"'\"'")}'`);
+    console.log(`✅ 完成通知已发送`);
+  } catch (e) {
+    console.error(`❌ 发送完成通知失败：${e.message}`);
+  }
+}
+
+/**
+ * 发送飞书启动通知
+ */
+async function sendFeishuNotification(userId, topic, mode, reportUrl) {
+  const modeNames = {
+    'trader': '短线交易',
+    'investor': '基本面分析',
+    'researcher': '产业研究',
+    'advisor': '资产配置',
+    'macro': '宏观分析',
+    'auto': '智能分析'
+  };
+  
+  const modeName = modeNames[mode] || mode;
+  
+  const message = `🚀 **研究已启动**
+
+📋 ${topic}
+🎯 ${modeName} 模式
+⏳ 预计：5-30 分钟
+
+🔗 [查看进度](${reportUrl})
+
+完成后会主动通知您！`;
+
+  try {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    await execAsync(`openclaw message send --target "user:${userId}" --message '${message.replace(/'/g, "'\"'\"'")}'`);
+    console.log(`✅ 飞书通知已发送至 ${userId}`);
+  } catch (e) {
+    console.error(`❌ 发送飞书通知失败：${e.message}`);
+  }
+}
+
+/**
+ * 检测研究模式
+ */
+function detectMode(topic) {
+  const topicLower = topic.toLowerCase();
+  
+  if (topicLower.includes('买') || topicLower.includes('卖') || topicLower.includes('涨停') || topicLower.includes('龙虎榜')) {
+    return 'trader';
+  }
+  if (topicLower.includes('财报') || topicLower.includes('估值') || topicLower.includes('PE') || topicLower.includes('PB')) {
+    return 'investor';
+  }
+  if (topicLower.includes('产业链') || topicLower.includes('竞争') || topicLower.includes('赛道')) {
+    return 'researcher';
+  }
+  if (topicLower.includes('理财') || topicLower.includes('配置') || topicLower.includes('风险')) {
+    return 'advisor';
+  }
+  if (topicLower.includes('GDP') || topicLower.includes('CPI') || topicLower.includes('政策')) {
+    return 'macro';
+  }
+  
+  return 'auto';
+}
+
+/**
+ * 启动研究任务
+ */
+async function startResearch(topic, channel = 'feishu', userId = 'default') {
+  const apiKey = getApiKey();
+  const mode = detectMode(topic);
+  const workspace = getWorkspace(channel, userId);
+  
+  // 生成任务 ID
+  const taskId = `task_${Date.now()}`;
+  const conversationId = Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+  const reportUrl = `https://cuecue.cn/c/${conversationId}`;
+  
+  console.log(`🚀 启动研究任务：${topic}`);
+  console.log(`   模式：${mode}`);
+  console.log(`   任务 ID: ${taskId}`);
+  
+  // 保存任务状态
+  const taskFile = path.join(workspace, 'tasks', `${taskId}.json`);
+  const taskData = {
+    taskId,
+    topic,
+    mode,
+    conversationId,
+    reportUrl,
+    status: 'running',
+    progress: '正在启动...',
+    createdAt: new Date().toISOString(),
+    channel,
+    userId
+  };
+  
+  fs.writeJsonSync(taskFile, taskData, { spaces: 2 });
+  console.log(`✅ 任务状态已保存：${taskFile}`);
+  
+  // 异步调用 CueCue API + 解析流式响应（不阻塞主流程）
+  (async () => {
+    try {
+      const { randomUUID } = await import('crypto');
+      const messageId = `msg_${randomUUID().replace(/-/g, '')}`;
+      const chatId = randomUUID().replace(/-/g, '');
+      
+      console.log(`📡 调用 CueCue API...`);
+      
+      const response = await fetch(`${CUECUE_API_BASE}/chat/stream`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: topic, id: messageId, type: 'text' }],
+          chat_id: chatId,
+          conversation_id: conversationId,
+          need_confirm: false,
+          need_analysis: false,
+          need_underlying: false,
+          need_recommend: false,
+          verbose: true
+        })
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API 失败：${response.status} - ${errorText.substring(0, 200)}`);
+      }
+      
+      console.log(`✅ API 连接成功：${response.status}`);
+      taskData.status = 'running';
+      taskData.apiCalled = true;
+      fs.writeJsonSync(taskFile, taskData, { spaces: 2 });
+      
+      // 发送飞书启动通知
+      await sendFeishuNotification(userId, topic, mode, reportUrl);
+      
+      // 解析 SSE 流式响应（Node.js 方式）
+      console.log(`📡 开始解析流式响应...`);
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+      let reportContent = '';
+      const notifyState = {
+        lastNotifiedSubtask: null,
+        lastNotifiedAt: null
+      };
+      const startTime = Date.now();
+      
+      for await (const chunk of response.body) {
+        buffer += decoder.decode(chunk, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.slice(6).trim();
+            if (dataStr === '[DONE]') continue;
+            
+            try {
+              const event = JSON.parse(dataStr);
+              
+              // 解析进度信息（参考原版 research.js + cuecueClient.js，增强子任务描述）
+              const percent = event.percent || 0;
+              let subtask = '';
+              let stage = '';
+              
+              // 智能体启动事件
+              if (event.agent_name) {
+                stage = `智能体 ${event.agent_name} 推理中...`;
+                subtask = event.agent_name;
+              }
+              // 工具调用事件（根据研究问题生成友好的中文描述）
+              else if (event.tool_title) {
+                const question = event.tool_input?.question || '';
+                
+                // 根据研究问题生成友好的子任务描述
+                if (question) {
+                  const q = question.toLowerCase();
+                  if (q.includes('moat') || q.includes('advantage') || q.includes('competitive')) {
+                    stage = '分析竞争优势与护城河';
+                    subtask = '竞争优势分析';
+                  } else if (q.includes('metric') || q.includes('margin') || q.includes('gross')) {
+                    stage = '收集关键财务指标与市场数据';
+                    subtask = '财务指标收集';
+                  } else if (q.includes('growth') || q.includes('expansion') || q.includes('trend')) {
+                    stage = '研究业务增长与市场趋势';
+                    subtask = '增长趋势研究';
+                  } else if (q.includes('framework') || q.includes('analysis')) {
+                    stage = '构建分析框架并检索核心数据';
+                    subtask = '框架构建与数据检索';
+                  } else if (q.includes('comparison') || q.includes('vs') || q.includes('compare')) {
+                    stage = '竞品对比分析与数据验证';
+                    subtask = '竞品对比分析';
+                  } else if (q.includes('fsd') || q.includes('autonomous') || q.includes('self-driving')) {
+                    stage = '研究自动驾驶技术与进展';
+                    subtask = '自动驾驶研究';
+                  } else if (q.includes('supercharger') || q.includes('charging') || q.includes('network')) {
+                    stage = '分析充电网络与基础设施';
+                    subtask = '充电网络分析';
+                  } else if (q.includes('battery') || q.includes('technology') || q.includes('tech')) {
+                    stage = '研究电池技术与技术布局';
+                    subtask = '电池技术研究';
+                  } else {
+                    stage = '深度研究分析中...';
+                    subtask = '研究分析';
+                  }
+                } else {
+                  stage = `执行工具：${event.tool_title}`;
+                  subtask = event.tool_name || event.tool_title;
+                }
+              }
+              // 完成状态
+              else if (event.conversation_status === 'finished') {
+                stage = '生成总结';
+                subtask = 'finalizing';
+              }
+              
+              // 打印调试信息
+              if (stage) {
+                console.log(`📊 [进度] stage="${stage}", subtask="${subtask}", percent=${percent}`);
+              }
+              
+              // 累积报告内容（用于完成通知摘要）
+              if (event.delta?.content) {
+                reportContent += event.delta.content.replace(/【\d+-\d+】/g, '');
+              }
+              
+              // 更新任务状态
+              taskData.progress = subtask || stage;
+              taskData.percent = percent;
+              if (subtask) taskData.lastSubtask = subtask;
+              fs.writeJsonSync(taskFile, taskData, { spaces: 2 });
+              
+              // 🔔 进度通知逻辑（基于旧版 research.js）
+              const elapsedMinutes = Math.floor((Date.now() - startTime) / 60000);
+              const displayMessage = subtask || stage || '';
+              
+              const shouldNotify = 
+                // 条件 1: 有新的 subtask 且与上次不同（立即通知，不受 elapsedMinutes 限制）
+                (subtask && displayMessage !== notifyState.lastNotifiedSubtask) ||
+                // 条件 2: 每 5 分钟强制推送（跳过 0 分钟，避免与启动通知重复）
+                (elapsedMinutes > 0 && elapsedMinutes % 5 === 0 && 
+                 (!notifyState.lastNotifiedAt || Date.now() - notifyState.lastNotifiedAt > 5 * 60 * 1000));
+              
+              if (shouldNotify) {
+                notifyState.lastNotifiedSubtask = displayMessage;
+                notifyState.lastNotifiedAt = Date.now();
+                
+                console.log(`📊 进度通知：${displayMessage} (${percent}%)`);
+                await sendProgressNotification(userId, topic, elapsedMinutes, displayMessage, reportUrl);
+              }
+              
+              // 检查是否完成（多种可能的完成标志）
+              const isCompleted = 
+                event.status === 'completed' || 
+                percent >= 100 || 
+                event.conversation_status === 'finished' ||
+                (event.type === 'agent_response' && event.agent_name === 'reporter');
+              
+              if (isCompleted) {
+                console.log(`✅ 研究完成！`);
+                taskData.status = 'completed';
+                taskData.completedAt = new Date().toISOString();
+                taskData.percent = 100;
+                fs.writeJsonSync(taskFile, taskData, { spaces: 2 });
+                
+                const durationMin = Math.floor((Date.now() - startTime) / 60000);
+                await sendCompleteNotification(userId, topic, durationMin, mode, reportUrl, reportContent);
+                return;
+              }
+              
+            } catch (e) {
+              // 忽略解析错误
+            }
+          }
+        }
+      }
+      
+      console.log(`✅ 流式响应结束`);
+      
+    } catch (error) {
+      console.error(`❌ API 异常：${error.message}`);
+      taskData.status = 'api_error';
+      taskData.apiError = error.message;
+      fs.writeJsonSync(taskFile, taskData, { spaces: 2 });
+    }
+  })();
+  
+  // 立即返回（不等待 API 响应）
+  return {
+    success: true,
+    taskId,
+    topic,
+    mode,
+    reportUrl,
+    estimatedTime: '5-30 分钟',
+    message: `研究已启动，完成后会通知您`
+  };
+}
+
+// 主函数
+async function main() {
+  const topic = process.argv[2];
+  const channel = process.argv[3] || 'feishu';
+  const userId = process.argv[4] || 'default';
+  
+  if (!topic) {
+    console.error('用法：node cue.js "研究主题" [channel] [userId]');
+    console.error('示例：node cue.js "ETF 市场周报" feishu ou_xxx');
+    process.exit(1);
+  }
+  
+  const result = await startResearch(topic, channel, userId);
+  
+  // 输出 JSON 结果（供 LLM 解析）
+  console.log('\n--- RESULT JSON ---');
+  console.log(JSON.stringify(result, null, 2));
+}
+
+main().catch(err => {
+  console.error('❌ 未捕获错误:', err);
+  process.exit(1);
+});

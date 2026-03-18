@@ -97,6 +97,11 @@ export function detectMode(topic, modes = BUILTIN_MODES) {
     return 'researcher';  // 默认产业研究
   }
   
+  // 长度检查：太短的文本无法准确判断模式
+  if (topic.trim().length < 4) {
+    return 'researcher';  // 返回默认模式
+  }
+  
   const topicLower = topic.toLowerCase().slice(0, 500);  // 限制长度
   let bestMode = 'researcher';
   let maxScore = 0;

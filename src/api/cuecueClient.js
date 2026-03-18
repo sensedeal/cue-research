@@ -24,8 +24,8 @@ export async function executeResearchStream({
     const { randomUUID } = await import('crypto');
     const finalConversationId = conversationId || randomUUID().replace(/-/g, '').substring(0, 16);
     
-    // 构建提示词（无需用户画像）
-    const prompt = buildSmartPrompt(topic, { mode });
+    // 构建提示词（增强版 Prompt）
+    const prompt = buildSmartPrompt(topic, mode);
     
     // 生成 messageId（必需参数）
     const messageId = `msg_${randomUUID().replace(/-/g, '')}`;
@@ -69,37 +69,33 @@ export async function executeResearchStream({
           if (dataStr === '[DONE]') continue;
           try {
             const event = JSON.parse(dataStr);
-            console.log('[API Event]', event);
-            console.log('[Processing Event]', event);
-            // 处理智能体启动事件
+            
+            // 检查智能体启动事件
             if (event.agent_name) {
-              console.log('[onProgress] Calling with agent_name:', event.agent_name);
               onProgress({ 
                 percent: 40, 
                 stage: `智能体 ${event.agent_name} 推理中...`,
                 subtask: event.agent_name
               });
-            } 
-            // 处理消息内容
-            else if (event.delta?.content) {
-              reportContent += event.delta.content.replace(/【\d+-\d+】/g, '');
             }
-            // 处理工具调用
+            // 检查工具调用事件
             else if (event.tool_title) {
-              console.log('[onProgress] Calling with tool_title:', event.tool_title);
               onProgress({ 
                 percent: 60, 
                 stage: `执行工具：${event.tool_title}`,
-                subtask: event.tool_name
+                subtask: event.tool_name || event.tool_title
               });
             }
-            // 处理最终状态
+            // 检查消息内容
+            else if (event.delta?.content) {
+              reportContent += event.delta.content.replace(/【\\d+-\\d+】/g, '');
+            }
+            // 检查完成状态
             else if (event.conversation_status === 'finished') {
-              console.log('[onProgress] Calling with finished status');
               onProgress({ percent: 99, stage: '生成总结', subtask: 'finalizing' });
             }
           } catch (e) {
-            console.log('[Event Parse Error]', e, 'line:', line);
+            console.log('[Parse Error]', e.message, 'data:', dataStr.substring(0, 100));
           }
         }
       }
